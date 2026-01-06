@@ -28,7 +28,7 @@
         .exercise-list { margin-top: 15px; border: 1px solid black; padding: 10px; min-height: 200px; }
         .exercise-entry { margin-bottom: 15px; border-bottom: 1px dotted black; padding-bottom: 12px; display: flex; flex-direction: column; }
         .exercise-text { font-family: 'Courier New', Monaco, monospace; white-space: pre-wrap; color: black; word-break: break-word; }
-        .exercise-notes { margin-left: 20px; font-style: italic; color: #555; margin-bottom: 5px; }
+        .exercise-notes { margin-left: 20px; font-style: italic; color: #555; margin-bottom: 5px; white-space: pre-wrap; word-break: break-word; }
         
         .delete-btn { 
             padding: 2px 8px; font-size: 9px; margin-top: 8px; 
@@ -103,9 +103,9 @@
         <h1>Exercise Tracker</h1>
 
         <div id="uploadPrompt" class="drop-zone">
-            <div onclick="document.getElementById('csvFileInput').click()">TAP TO IMPORT EXERCISES.CSV</div>
+            <div id="importTapTarget">TAP TO IMPORT EXERCISES.CSV</div>
             <div style="margin-top: 15px; font-weight: normal; border-top: 1px solid #ccc; padding-top: 10px;">
-                <button class="main-action-btn" onclick="tracker.startFresh()">Or Start Fresh Session</button>
+                <button id="startFreshBtn" class="main-action-btn">Or Start Fresh Session</button>
             </div>
         </div>
 
@@ -116,7 +116,7 @@
                     <input type="date" id="exerciseDate">
                     <select id="exerciseTypeSelect"></select>
                     <input type="number" id="exerciseDuration" placeholder="Minutes">
-                    <button class="main-action-btn" onclick="tracker.addExercise()">Add</button>
+                    <button id="addExerciseBtn" class="main-action-btn">Add</button>
                 </div>
                 <textarea id="exerciseNotes" placeholder="Notes (optional)"></textarea>
             </div>
@@ -126,7 +126,7 @@
                 <div class="exercise-type-manager">
                     <div class="input-row">
                         <input type="text" id="newExerciseType" placeholder="New type...">
-                        <button class="type-add-btn" onclick="tracker.addExerciseType()">Add Type</button>
+                        <button id="addTypeBtn" class="type-add-btn">Add Type</button>
                     </div>
                     <div id="exerciseTypeList"></div>
                 </div>
@@ -138,9 +138,9 @@
                     <div id="summaryContent"></div>
                     <div id="multiHeatmapContainer" class="heatmap-container"></div>
                     <div class="buttons">
-                        <button onclick="window.print()">Print PDF</button>
-                        <button onclick="tracker.exportToCSV()">Export CSV</button>
-                        <button onclick="location.reload()">Clear Session</button>
+                        <button id="printBtn">Print PDF</button>
+                        <button id="exportBtn">Export CSV</button>
+                        <button id="clearBtn">Clear Session</button>
                     </div>
                 </div>
             </div>
@@ -151,19 +151,111 @@
             </div>
         </div>
 
-        <input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="handleFileImport(event)">
+        <input type="file" id="csvFileInput" accept=".csv" style="display:none">
     </div>
 
     <script>
+        function clearElement(el) {
+            while (el.firstChild) el.removeChild(el.firstChild);
+        }
+
+        function isValidISODateYYYYMMDD(s) {
+            if (typeof s !== 'string') return false;
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+            const d = new Date(s + 'T00:00:00Z');
+            return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === s;
+        }
+
+        // RFC4180-ish CSV parser:
+        // - Supports commas/newlines inside quoted fields
+        // - Supports escaped quotes as ""
+        // Returns array of rows; each row is array of fields (strings).
+        function parseCSV(text) {
+            const rows = [];
+            let row = [];
+            let field = '';
+            let inQuotes = false;
+
+            // Normalize line endings to \n (keep actual \n as row breaks only when not in quotes)
+            const s = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+            for (let i = 0; i < s.length; i++) {
+                const ch = s[i];
+
+                if (inQuotes) {
+                    if (ch === '"') {
+                        const next = s[i + 1];
+                        if (next === '"') { // escaped quote
+                            field += '"';
+                            i++;
+                        } else {
+                            inQuotes = false;
+                        }
+                    } else {
+                        field += ch;
+                    }
+                } else {
+                    if (ch === '"') {
+                        inQuotes = true;
+                    } else if (ch === ',') {
+                        row.push(field);
+                        field = '';
+                    } else if (ch === '\n') {
+                        row.push(field);
+                        field = '';
+                        rows.push(row);
+                        row = [];
+                    } else {
+                        field += ch;
+                    }
+                }
+            }
+
+            // flush last field/row
+            row.push(field);
+            rows.push(row);
+
+            // trim possible trailing empty rows (common if file ends with newline)
+            while (rows.length > 0) {
+                const last = rows[rows.length - 1];
+                const allEmpty = last.every(v => String(v).trim() === '');
+                if (!allEmpty) break;
+                rows.pop();
+            }
+
+            return rows;
+        }
+
         class ExerciseTracker {
             constructor() {
                 this.exercises = [];
                 this.exerciseTypes = ['cycling', 'gym', 'squash', 'running', 'pilates', 'swimming'];
+
+                this.bindUI();
                 this.setDefaultDate();
+                this.updateDisplay(); // ensures type select has initial options
+            }
+
+            bindUI() {
+                const importTapTarget = document.getElementById('importTapTarget');
+                const csvInput = document.getElementById('csvFileInput');
+
+                importTapTarget.addEventListener('click', () => csvInput.click());
+                document.getElementById('startFreshBtn').addEventListener('click', () => this.startFresh());
+
+                document.getElementById('addExerciseBtn').addEventListener('click', () => this.addExercise());
+                document.getElementById('addTypeBtn').addEventListener('click', () => this.addExerciseType());
+
+                document.getElementById('printBtn').addEventListener('click', () => window.print());
+                document.getElementById('exportBtn').addEventListener('click', () => this.exportToCSV());
+                document.getElementById('clearBtn').addEventListener('click', () => location.reload());
+
+                csvInput.addEventListener('change', (e) => handleFileImport(e));
             }
 
             setDefaultDate() {
-                document.getElementById('exerciseDate').value = new Date().toISOString().split('T')[0];
+                const el = document.getElementById('exerciseDate');
+                el.value = new Date().toISOString().split('T')[0];
             }
 
             startFresh() {
@@ -175,10 +267,22 @@
             addExercise() {
                 const date = document.getElementById('exerciseDate').value;
                 const type = document.getElementById('exerciseTypeSelect').value;
-                const duration = parseInt(document.getElementById('exerciseDuration').value);
+                const durationRaw = document.getElementById('exerciseDuration').value;
+                const duration = parseInt(durationRaw, 10);
                 const notes = document.getElementById('exerciseNotes').value.trim();
-                if (!date || !type || !duration) return alert('Fill required fields');
-                this.exercises.unshift({ id: Date.now(), date, exercise_type: type, duration_minutes: duration, notes });
+
+                if (!date || !type || !Number.isFinite(duration) || duration <= 0) {
+                    return alert('Fill required fields');
+                }
+
+                this.exercises.unshift({
+                    id: Date.now(),
+                    date,
+                    exercise_type: type,
+                    duration_minutes: duration,
+                    notes
+                });
+
                 this.updateDisplay();
                 document.getElementById('exerciseDuration').value = '';
                 document.getElementById('exerciseNotes').value = '';
@@ -220,29 +324,94 @@
             updateTypeUI() {
                 const sel = document.getElementById('exerciseTypeSelect');
                 const cur = sel.value;
-                sel.innerHTML = '<option value="">Select...</option>' + 
-                    this.exerciseTypes.sort().map(t => `<option value="${t}">${t}</option>`).join('');
+
+                clearElement(sel);
+
+                const defaultOpt = document.createElement('option');
+                defaultOpt.value = '';
+                defaultOpt.textContent = 'Select...';
+                sel.appendChild(defaultOpt);
+
+                const sortedTypes = [...this.exerciseTypes].sort((a, b) => a.localeCompare(b));
+                for (const t of sortedTypes) {
+                    const opt = document.createElement('option');
+                    opt.value = t;
+                    opt.textContent = t;
+                    sel.appendChild(opt);
+                }
+
                 if (this.exerciseTypes.includes(cur)) sel.value = cur;
-                document.getElementById('exerciseTypeList').innerHTML = this.exerciseTypes.sort().map(t => `
-                    <div class="exercise-type-item"><span>${t}</span><button class="type-del-btn" onclick="tracker.deleteExerciseType('${t}')">DEL</button></div>
-                `).join('');
+
+                const list = document.getElementById('exerciseTypeList');
+                clearElement(list);
+
+                for (const t of sortedTypes) {
+                    const item = document.createElement('div');
+                    item.className = 'exercise-type-item';
+
+                    const span = document.createElement('span');
+                    span.textContent = t;
+
+                    const btn = document.createElement('button');
+                    btn.className = 'type-del-btn';
+                    btn.type = 'button';
+                    btn.textContent = 'DEL';
+                    btn.addEventListener('click', () => this.deleteExerciseType(t));
+
+                    item.appendChild(span);
+                    item.appendChild(btn);
+                    list.appendChild(item);
+                }
             }
 
             updateLogUI() {
-                const sorted = [...this.exercises].sort((a,b) => new Date(b.date) - new Date(a.date));
-                document.getElementById('exerciseList').innerHTML = sorted.map(ex => `
-                    <div class="exercise-entry">
-                        <div class="exercise-text">${this.formatExerciseLine(ex.date, ex.exercise_type, ex.duration_minutes)}</div>
-                        ${ex.notes ? `<div class="exercise-notes">${ex.notes}</div>` : ''}
-                        <button class="delete-btn" onclick="tracker.deleteExercise(${ex.id})">DELETE</button>
-                    </div>
-                `).join('') || '<div class="no-exercises">Empty session.</div>';
+                const sorted = [...this.exercises].sort((a, b) => new Date(b.date) - new Date(a.date));
+                const list = document.getElementById('exerciseList');
+                clearElement(list);
+
+                if (sorted.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.className = 'no-exercises';
+                    empty.textContent = 'Empty session.';
+                    list.appendChild(empty);
+                    return;
+                }
+
+                for (const ex of sorted) {
+                    const entry = document.createElement('div');
+                    entry.className = 'exercise-entry';
+
+                    const text = document.createElement('div');
+                    text.className = 'exercise-text';
+                    text.textContent = this.formatExerciseLine(ex.date, ex.exercise_type, ex.duration_minutes);
+
+                    entry.appendChild(text);
+
+                    if (ex.notes) {
+                        const notes = document.createElement('div');
+                        notes.className = 'exercise-notes';
+                        notes.textContent = ex.notes;
+                        entry.appendChild(notes);
+                    }
+
+                    const del = document.createElement('button');
+                    del.className = 'delete-btn';
+                    del.type = 'button';
+                    del.textContent = 'DELETE';
+                    del.addEventListener('click', () => this.deleteExercise(ex.id));
+
+                    entry.appendChild(del);
+                    list.appendChild(entry);
+                }
             }
 
             updateSummaryUI() {
                 const now = new Date();
-                const thirtyDaysAgo = new Date().setDate(now.getDate() - 30);
-                const ninetyDaysAgo = new Date().setDate(now.getDate() - 90);
+                const thirtyDaysAgo = new Date(now);
+                thirtyDaysAgo.setDate(now.getDate() - 30);
+
+                const ninetyDaysAgo = new Date(now);
+                ninetyDaysAgo.setDate(now.getDate() - 90);
 
                 let startDateText = "";
                 if (this.exercises.length > 0) {
@@ -257,11 +426,13 @@
                     allData: this.calculateGroupStats(this.exercises)
                 };
 
-                document.getElementById('summaryContent').innerHTML = `
-                    ${this.renderSummarySection("Last 30 Days", stats.last30)}
-                    ${this.renderSummarySection("Last 90 Days", stats.last90)}
-                    ${this.renderSummarySection(`All Data Summary${startDateText}`, stats.allData)}
-                `;
+                const summaryContent = document.getElementById('summaryContent');
+                clearElement(summaryContent);
+
+                summaryContent.appendChild(this.renderSummarySection("Last 30 Days", stats.last30));
+                summaryContent.appendChild(this.renderSummarySection("Last 90 Days", stats.last90));
+                summaryContent.appendChild(this.renderSummarySection(`All Data Summary${startDateText}`, stats.allData));
+
                 this.renderHeatmaps();
             }
 
@@ -272,46 +443,84 @@
                     acc[ex.exercise_type].min += ex.duration_minutes;
                     return acc;
                 }, {});
-                
+
                 const totalMins = exercises.reduce((sum, ex) => sum + ex.duration_minutes, 0);
                 const typeCount = Object.keys(group).length;
-                
+
                 return { breakdown: group, totalMins, typeCount };
             }
 
             renderSummarySection(title, data) {
-                const sortedTypes = Object.entries(data.breakdown).sort((a,b) => b[1].min - a[1].min);
-                const lines = sortedTypes.map(([type, d]) => `
-                    <div class="summary-line">
-                        <span class="summary-label">${type}</span>
-                        <span class="summary-dash"></span>
-                        <span class="summary-stats">${d.count} sessions, ${d.min} min</span>
-                    </div>
-                `).join('');
+                const groupEl = document.createElement('div');
+                groupEl.className = 'summary-group';
 
-                return `
-                    <div class="summary-group">
-                        <div class="summary-subtitle">${title}</div>
-                        <div class="summary-total-line">Total exercises: ${data.typeCount} types, ${data.totalMins} minutes</div>
-                        ${lines || '<div class="summary-line">No data for this period.</div>'}
-                    </div>
-                `;
+                const subtitle = document.createElement('div');
+                subtitle.className = 'summary-subtitle';
+                subtitle.textContent = title;
+
+                const total = document.createElement('div');
+                total.className = 'summary-total-line';
+                total.textContent = `Total exercises: ${data.typeCount} types, ${data.totalMins} minutes`;
+
+                groupEl.appendChild(subtitle);
+                groupEl.appendChild(total);
+
+                const sortedTypes = Object.entries(data.breakdown).sort((a, b) => b[1].min - a[1].min);
+
+                if (sortedTypes.length === 0) {
+                    const noData = document.createElement('div');
+                    noData.className = 'summary-line';
+                    noData.textContent = 'No data for this period.';
+                    groupEl.appendChild(noData);
+                    return groupEl;
+                }
+
+                for (const [type, d] of sortedTypes) {
+                    const line = document.createElement('div');
+                    line.className = 'summary-line';
+
+                    const label = document.createElement('span');
+                    label.className = 'summary-label';
+                    label.textContent = type;
+
+                    const dash = document.createElement('span');
+                    dash.className = 'summary-dash';
+
+                    const stats = document.createElement('span');
+                    stats.className = 'summary-stats';
+                    stats.textContent = `${d.count} sessions, ${d.min} min`;
+
+                    line.appendChild(label);
+                    line.appendChild(dash);
+                    line.appendChild(stats);
+
+                    groupEl.appendChild(line);
+                }
+
+                return groupEl;
             }
 
             renderHeatmaps() {
                 const container = document.getElementById('multiHeatmapContainer');
-                container.innerHTML = '';
+                clearElement(container);
+
                 const years = [...new Set(this.exercises.map(ex => new Date(ex.date).getFullYear()))].sort((a, b) => b - a);
                 if (years.length === 0) years.push(new Date().getFullYear());
+
                 years.forEach(year => {
                     const label = document.createElement('div');
                     label.className = 'heatmap-year-label';
                     label.innerText = `Year: ${year}`;
+
                     const wrapper = document.createElement('div');
                     wrapper.className = 'heatmap-wrapper';
+
                     const grid = document.createElement('div');
                     grid.className = 'heatmap-grid';
+
+                    // Safe: generated cells use computed dates/minutes (not raw user strings)
                     grid.innerHTML = this.generateYearGrid(year);
+
                     wrapper.appendChild(grid);
                     container.appendChild(label);
                     container.appendChild(wrapper);
@@ -323,12 +532,13 @@
                     acc[ex.date] = (acc[ex.date] || 0) + ex.duration_minutes;
                     return acc;
                 }, {});
+
                 let html = '';
-                for(let m=0; m<12; m++) {
-                    for(let d=1; d<=31; d++) {
+                for (let m = 0; m < 12; m++) {
+                    for (let d = 1; d <= 31; d++) {
                         const dt = new Date(year, m, d);
-                        if(dt.getMonth() !== m) { html += '<div class="heatmap-cell level-0"></div>'; continue; }
-                        const str = `${year}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                        if (dt.getMonth() !== m) { html += '<div class="heatmap-cell level-0"></div>'; continue; }
+                        const str = `${year}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                         const mins = daily[str] || 0;
                         const lvl = mins === 0 ? 0 : mins <= 30 ? 1 : mins <= 60 ? 2 : mins <= 120 ? 3 : 4;
                         html += `<div class="heatmap-cell level-${lvl}" title="${str}: ${mins}min"></div>`;
@@ -337,38 +547,57 @@
                 return html;
             }
 
-            importCSV(csv) {
-                const lines = csv.trim().split('\n');
-                if (lines.length < 2) return;
-                const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
-                this.exercises = lines.slice(1).map(l => {
-                    const v = this.parseCSVLine(l);
-                    const type = v[headers.indexOf('exercise_type')];
-                    if (type && !this.exerciseTypes.includes(type)) this.exerciseTypes.push(type);
-                    return {
-                        id: Date.now() + Math.random(),
-                        date: v[headers.indexOf('date')],
-                        exercise_type: type,
-                        duration_minutes: parseInt(v[headers.indexOf('duration_minutes')]),
-                        notes: (v[headers.indexOf('notes')] || '').replace(/^"|"$/g, '')
-                    };
-                }).filter(ex => ex.date);
-                this.startFresh();
-            }
+            importCSV(csvText) {
+                const rows = parseCSV(csvText);
+                if (!rows || rows.length < 2) return;
 
-            parseCSVLine(l) {
-                const r = []; let c = '', q = false;
-                for(let char of l) {
-                    if(char === '"') q = !q;
-                    else if(char === ',' && !q) { r.push(c); c = ''; }
-                    else c += char;
+                const headers = rows[0].map(h => String(h || '').trim().toLowerCase());
+                const idxDate = headers.indexOf('date');
+                const idxType = headers.indexOf('exercise_type');
+                const idxDur = headers.indexOf('duration_minutes');
+                const idxNotes = headers.indexOf('notes');
+
+                if (idxDate === -1 || idxType === -1 || idxDur === -1) {
+                    alert('CSV must include headers: date, exercise_type, duration_minutes (notes optional).');
+                    return;
                 }
-                r.push(c); return r;
+
+                const imported = [];
+                for (let i = 1; i < rows.length; i++) {
+                    const r = rows[i] || [];
+                    const dateRaw = String(r[idxDate] ?? '').trim();
+                    const typeRaw = String(r[idxType] ?? '').trim();
+                    const durRaw = String(r[idxDur] ?? '').trim();
+                    const notesRaw = String(r[idxNotes] ?? '').trim();
+
+                    // Keep behavior for valid data; just avoid invalids poisoning stats/UI.
+                    if (!isValidISODateYYYYMMDD(dateRaw)) continue;
+                    if (!typeRaw) continue;
+
+                    const dur = parseInt(durRaw, 10);
+                    const duration = Number.isFinite(dur) && dur > 0 ? dur : 0;
+
+                    if (typeRaw && !this.exerciseTypes.includes(typeRaw)) this.exerciseTypes.push(typeRaw);
+
+                    imported.push({
+                        id: Date.now() + Math.random(),
+                        date: dateRaw,
+                        exercise_type: typeRaw,
+                        duration_minutes: duration,
+                        notes: notesRaw
+                    });
+                }
+
+                this.exercises = imported;
+                this.startFresh();
             }
 
             exportToCSV() {
                 const h = 'date,exercise_type,duration_minutes,notes';
-                const r = this.exercises.map(ex => `${ex.date},${ex.exercise_type},${ex.duration_minutes},"${ex.notes.replace(/"/g, '""')}"`);
+                const r = this.exercises.map(ex => {
+                    const notes = String(ex.notes || '').replace(/"/g, '""');
+                    return `${ex.date},${ex.exercise_type},${ex.duration_minutes},"${notes}"`;
+                });
                 const csvContent = [h, ...r].join('\n');
                 const blob = new Blob([csvContent], { type: 'application/octet-stream' });
                 const url = URL.createObjectURL(blob);
@@ -377,13 +606,17 @@
                 a.download = `workout_history_${new Date().toISOString().split('T')[0]}.csv`;
                 document.body.appendChild(a);
                 a.click();
-                setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 100);
             }
         }
 
         const tracker = new ExerciseTracker();
+
         function handleFileImport(e) {
-            const file = e.target.files[0];
+            const file = e.target.files && e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
             reader.onload = (evt) => tracker.importCSV(evt.target.result);
