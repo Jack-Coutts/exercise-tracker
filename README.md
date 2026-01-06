@@ -2,7 +2,7 @@
 
 A simple, private way to track your workouts and see your progress through "consistency maps" (heatmaps). 
 
-### 🔗 [Click Here to Open the Tracker](https://anon-anon-111.github.io/exercise-tracker/)
+### 🔗 [Click Here to Open the Tracker](https://jack-coutts.github.io/exercise-tracker/)
 
 ---
 
