@@ -38,7 +38,7 @@
         /* SUMMARY & HEATMAP */
         .summary { border: 2px solid black; padding: 15px; margin-top: 30px; }
         .summary-group { margin-bottom: 25px; }
-        .summary-subtitle { font-weight: bold; margin-bottom: 10px; text-decoration: underline; font-size: 13px; text-transform: capitalize; }
+        .summary-subtitle { font-weight: bold; margin-bottom: 10px; text-decoration: underline; font-size: 13px; }
         .summary-total-line { margin-bottom: 8px; font-weight: normal; }
         .summary-line { margin-bottom: 3px; font-size: 11px; white-space: pre; }
         .buttons { text-align: center; margin-top: 15px; }
@@ -56,6 +56,7 @@
         .level-3 { background-color: #6b7280; }
         .level-4 { background-color: #000000; }
 
+        /* TYPE MANAGER */
         .exercise-type-manager { margin-bottom: 15px; border: 1px solid black; padding: 10px; }
         .exercise-type-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; padding: 2px 5px; border-bottom: 1px solid #eee; }
         .type-del-btn { padding: 1px 4px; font-size: 9px; margin-left: 15px; }
@@ -227,19 +228,27 @@
 
             updateSummaryUI() {
                 const now = new Date();
-                const oneMonthAgo = new Date().setDate(now.getDate() - 30);
-                const threeMonthsAgo = new Date().setDate(now.getDate() - 90);
+                const thirtyDaysAgo = new Date().setDate(now.getDate() - 30);
+                const ninetyDaysAgo = new Date().setDate(now.getDate() - 90);
+
+                // Find earliest entry date
+                let startDateText = "";
+                if (this.exercises.length > 0) {
+                    const sortedAsc = [...this.exercises].sort((a, b) => new Date(a.date) - new Date(b.date));
+                    const firstDate = new Date(sortedAsc[0].date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                    startDateText = ` (since ${firstDate})`;
+                }
 
                 const stats = {
-                    lastMonth: this.calculateGroupStats(this.exercises.filter(ex => new Date(ex.date) >= oneMonthAgo)),
-                    last3Months: this.calculateGroupStats(this.exercises.filter(ex => new Date(ex.date) >= threeMonthsAgo)),
-                    allTime: this.calculateGroupStats(this.exercises)
+                    last30: this.calculateGroupStats(this.exercises.filter(ex => new Date(ex.date) >= thirtyDaysAgo)),
+                    last90: this.calculateGroupStats(this.exercises.filter(ex => new Date(ex.date) >= ninetyDaysAgo)),
+                    allData: this.calculateGroupStats(this.exercises)
                 };
 
                 document.getElementById('summaryContent').innerHTML = `
-                    ${this.renderSummarySection("Last Month", stats.lastMonth)}
-                    ${this.renderSummarySection("Last 3 Months", stats.last3Months)}
-                    ${this.renderSummarySection("All Time Summary", stats.allTime)}
+                    ${this.renderSummarySection("Last 30 Days", stats.last30)}
+                    ${this.renderSummarySection("Last 90 Days", stats.last90)}
+                    ${this.renderSummarySection(`All Data Summary${startDateText}`, stats.allData)}
                 `;
                 this.renderHeatmaps();
             }
