@@ -1,4 +1,6 @@
-<html lang="en"><head>
+<!DOCTYPE html>
+<html lang="en">
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Exercise Tracker</title>
@@ -43,7 +45,7 @@
         .drop-zone { border: 2px dashed black; padding: 40px; text-align: center; margin-bottom: 10px; background: #f9f9f9; cursor: pointer; font-weight: bold; }
         .hidden { display: none !important; }
 
-        /* PRINT HIDING */
+        /* PRINT SETTINGS */
         @media print {
             .drop-zone, .exercise-type-manager, .buttons, .section:has(.input-row), h1 { display: none !important; }
             .container { max-width: 100%; padding: 0; }
@@ -285,16 +287,29 @@
 
             exportToCSV() {
                 const h = 'date,exercise_type,duration_minutes,notes';
-                const r = this.exercises.map(ex => `${ex.date},${ex.exercise_type},${ex.duration_minutes},"${ex.notes.replace(/"/g, '""')}"`);
-                const blob = new Blob([[h, ...r].join('\n')], { type: 'text/csv' });
+                const r = this.exercises.map(ex => 
+                    `${ex.date},${ex.exercise_type},${ex.duration_minutes},"${ex.notes.replace(/"/g, '""')}"`
+                );
+                const csvContent = [h, ...r].join('\n');
+                
+                // Optimized for Mobile Safari/Chrome "Save to Files"
+                const blob = new Blob([csvContent], { type: 'application/octet-stream' });
+                const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
-                a.href = URL.createObjectURL(blob);
-                a.download = `workout_history_export.csv`;
+                a.href = url;
+                a.download = `workout_export_${new Date().toISOString().split('T')[0]}.csv`;
+                
+                document.body.appendChild(a);
                 a.click();
+                
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 100);
             }
         }
 
-        // GLOBAL DEFINITIONS
+        // Global Bridge for the onchange event
         const tracker = new ExerciseTracker();
 
         function handleFileImport(e) {
@@ -305,4 +320,5 @@
             reader.readAsText(file);
         }
     </script>
-</body></html>
+</body>
+</html>
