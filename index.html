@@ -76,7 +76,7 @@
         .exercise-type-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; padding: 2px 5px; border-bottom: 1px solid #eee; }
         .type-del-btn { padding: 1px 4px; font-size: 9px; margin-left: 15px; }
 
-        . drop-zone { border:  2px dashed black; padding: 40px; text-align: center; margin-bottom: 10px; background: #f9f9f9; cursor: pointer; font-weight: bold; }
+        .drop-zone { border: 2px dashed black; padding: 40px; text-align: center; margin-bottom: 10px; background: #f9f9f9; font-weight: bold; }
         .hidden { display: none ! important; }
 
         /* VISUALLY HIDDEN - Accessible but not visible */
@@ -116,10 +116,9 @@
         <h1>Exercise Tracker</h1>
 
         <div id="uploadPrompt" class="drop-zone">
-            <div onclick="document.getElementById('csvFileInput').click()">TAP TO IMPORT EXERCISES. CSV</div>
-            <div style="margin-top:  15px; font-weight: normal; border-top: 1px solid #ccc; padding-top: 10px;">
-                <button type="button" class="main-action-btn" onclick="tracker.startFresh()">Or Start Fresh Session</button>
-            </div>
+            <button type="button" onclick="document.getElementById('csvFileInput').click()">Import Exercises (.csv)</button>
+            <div style="margin-top: 15px; font-weight: normal;">or</div>
+            <button type="button" style="margin-top: 15px;" onclick="tracker.startFresh()">Start Fresh Session</button>
         </div>
 
         <div id="mainApp" class="hidden">
