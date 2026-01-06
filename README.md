@@ -1,63 +1,56 @@
-# Minimalist Exercise Tracker
+# Simple Exercise Tracker
 
-A private, stateless, and local-first web application for logging workouts and visualizing physical activity through heatmaps.
+A simple, private way to track your workouts and see your progress through "consistency maps" (heatmaps). 
 
-### 🔗 [Launch Application](https://anon-anon-111.github.io/exercise-tracker/)
-
----
-
-## Overview
-
-This tracker is designed for users who prioritize data ownership and privacy. It operates on a **stateless architecture**, meaning no data is ever transmitted to a server or stored in a cloud database. All processing occurs locally within your browser's memory.
-
-### Key Features
-* **Multi-Year Heatmaps:** Automatic generation of activity grids for every year present in your data.
-* **Session Statistics:** View total durations and session counts categorized by exercise type.
-* **Print-Ready Reports:** Optimized CSS for exporting clean, high-resolution PDF summaries without UI clutter.
-* **Mobile Optimized:** Designed with a "Courier" aesthetic for high readability on small screens.
+### 🔗 [Click Here to Open the Tracker](https://anon-anon-111.github.io/exercise-tracker/)
 
 ---
 
-## Workflow
+## 🟢 How This Works (The "Privacy First" Way)
+Most apps store your personal information on their own computers (the "Cloud"). **This app does not.** Instead, your data stays in a single file on **your** phone or computer. Think of the web page as a "viewer" and your file as the "digital notebook."
 
-
-
-Because this app is accountless, it follows a simple **Import-Update-Export** cycle:
-
-1.  **Launch:** Open the web app on your phone or laptop.
-2.  **Import:** Click the "Import CSV" zone to load your existing `exercises.csv`.
-3.  **Log:** Add your new exercise entries for the day.
-4.  **Export:** Click **"Export CSV"** to save the updated file to your device.
-5.  **Reset:** Refreshing the page clears the session memory, ensuring your data remains private.
+### What is a CSV file?
+CSV stands for "Comma Separated Values." It is a simple text file that looks like a spreadsheet. You can open it with Excel, Google Sheets, or even a basic Notepad. In this app, it acts as your **Personal Database**.
 
 ---
 
-## 📱 Mobile Installation (PWA)
+## 🚀 Quick Start Guide
 
-To use the tracker as a native-feeling app on your mobile device:
+### 1. Get the Example File
+If you want to see how the app looks with data already in it:
+1. Find the file named `example.csv` in the list of files above.
+2. Click on it.
+3. Click the **Download** icon (it looks like an arrow pointing down) to save it to your device.
 
-### iOS (Safari)
-1. Navigate to the app URL.
-2. Tap the **Share** icon (square with an up arrow).
-3. Scroll down and select **"Add to Home Screen"**.
+### 2. How to use the app every day
+Because the app doesn't "remember" you (for privacy), you follow this simple 3-step cycle:
 
-### Android (Chrome)
-1. Navigate to the app URL.
-2. Tap the **Three Dots** menu icon.
-3. Select **"Install App"** or **"Add to Home Screen"**.
+1. **OPEN & UPLOAD:** Open the [Tracker Link](https://anon-anon-111.github.io/exercise-tracker/) and tap the "Import" box. Select your `exercises.csv` file. Your history and maps will instantly appear.
+2. **LOG:** Add your new workout for today (type, minutes, and any notes).
+3. **SAVE & DOWNLOAD:** This is the most important step! Tap **"Export CSV"**. This saves a *new* version of your file to your device. You can delete the old one.
+
+**If you close the page without clicking "Export," your new entries will not be saved.**
+
+
+
+---
+
+## 📱 Using it on your Phone
+You can make this feel like a real app by adding it to your home screen:
+
+**On iPhone (Safari):**
+1. Tap the **Square with an Up Arrow** at the bottom of the screen.
+2. Scroll down and tap **"Add to Home Screen"**.
+
+**On Android (Chrome):**
+1. Tap the **Three Dots** in the top right corner.
+2. Tap **"Install App"** or **"Add to Home Screen"**.
 
 ---
 
-## 🔒 Privacy & Data Policy
-
-* **No Tracking:** No cookies, trackers, or analytics are used.
-* **No Backend:** There is no server-side database. Your data stays in your CSV.
-* **Open Source:** The entire logic is contained within a single HTML file for transparency.
-
-## 📄 Data Schema
-
-If creating a CSV manually, ensure the following header format:
-`date, exercise_type, duration_minutes, notes`
+## 💡 Pro Tips
+* **No Internet Needed:** Once you open the page, you can actually use it at the gym without a signal. Just remember to download the file before you close the tab!
+* **Printing:** Use the **Print PDF** button to create a clean, report of your month or year—perfect for showing a trainer or keeping a physical log.
+* **Editing:** If you make a mistake, you can always open your CSV file in Excel, fix the numbers, save it, and upload it back to the app.
 
 ---
-*Built for performance and privacy.*
