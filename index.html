@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Exercise Tracker</title>
     <style>
-        /* UI STYLES */
+        /* CORE STYLES */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Courier New', Monaco, monospace; background: white; color: black; padding: 20px; line-height: 1.6; font-size: 12px; }
         .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; }
@@ -13,27 +13,50 @@
         .section { margin-bottom: 30px; }
         .section-title { margin-bottom: 15px; text-decoration: underline; }
         .input-row { margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-        input[type="text"], input[type="number"], input[type="date"], textarea, select { font-family: 'Courier New', Monaco, monospace; border: 1px solid black; padding: 4px; margin-right: 5px; font-size: 12px; }
+        
+        input[type="text"], input[type="number"], input[type="date"], textarea, select { 
+            font-family: 'Courier New', Monaco, monospace; 
+            border: 1px solid black; 
+            padding: 4px; 
+            font-size: 12px; 
+        }
         textarea { width: 100%; min-height: 40px; resize: vertical; margin-top: 5px; }
         button { font-family: 'Courier New', Monaco, monospace; border: 1px solid black; background: white; padding: 4px 8px; cursor: pointer; font-size: 12px; }
         button:hover { background: #f0f0f0; }
+
         .exercise-list { margin-top: 15px; border: 1px solid black; padding: 10px; min-height: 200px; }
         .exercise-entry { margin-bottom: 15px; border-bottom: 1px dotted black; padding-bottom: 10px; }
         .exercise-main { display: flex; align-items: center; margin-bottom: 5px; }
-        .exercise-text { flex: 1; font-family: 'Courier New', Monaco, monospace; }
+        .exercise-text { flex: 1; font-family: 'Courier New', Monaco, monospace; white-space: pre-wrap; }
         .exercise-notes { margin-left: 20px; font-style: italic; color: #555; margin-bottom: 5px; }
         .delete-btn { padding: 2px 6px; font-size: 10px; margin-left: 10px; }
+
         .summary { border: 2px solid black; padding: 15px; margin-top: 30px; }
         .summary-subtitle { font-weight: bold; margin-bottom: 10px; text-decoration: underline; }
         .summary-line { margin-bottom: 3px; font-size: 11px; }
         .buttons { text-align: center; margin-top: 15px; }
-        .buttons button { margin: 0 5px; }
-        .exercise-type-manager { margin-bottom: 15px; border: 1px solid black; padding: 10px; }
-        .exercise-type-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; padding: 2px 5px; }
+        .buttons button { margin: 5px; }
 
-        /* HEATMAP STYLES */
+        /* RESPONSIVE HEATMAP STYLES */
+        .heatmap-container { margin-top: 20px; width: 100%; }
         .heatmap-year-label { font-weight: bold; margin-top: 15px; margin-bottom: 5px; text-decoration: underline; }
-        .heatmap-grid { display: grid; grid-template-columns: repeat(31, 1fr); gap: 2px; border: 1px solid black; padding: 5px; margin-bottom: 10px; }
+        
+        /* The Scroll Wrapper */
+        .heatmap-wrapper { 
+            overflow-x: auto; 
+            -webkit-overflow-scrolling: touch; 
+            border: 1px solid #eee; 
+            padding: 5px;
+            margin-bottom: 15px;
+        }
+
+        .heatmap-grid { 
+            display: grid; 
+            grid-template-columns: repeat(31, 1fr); 
+            gap: 2px; 
+            min-width: 450px; /* Forces enough width for 31 days to remain visible */
+        }
+
         .heatmap-cell { width: 10px; height: 10px; border-radius: 2px; border: 1px solid #e5e7eb; }
         .level-0 { background-color: #ffffff; }
         .level-1 { background-color: #d1d5db; }
@@ -41,14 +64,27 @@
         .level-3 { background-color: #6b7280; }
         .level-4 { background-color: #000000; }
 
-        /* STATELESS OVERLAY */
+        /* INTERFACE HELPERS */
+        .exercise-type-manager { margin-bottom: 15px; border: 1px solid black; padding: 10px; }
+        .exercise-type-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; padding: 2px 5px; }
         .drop-zone { border: 2px dashed black; padding: 40px; text-align: center; margin-bottom: 10px; background: #f9f9f9; cursor: pointer; font-weight: bold; }
         .hidden { display: none !important; }
+
+        /* MOBILE OPTIMIZATIONS */
+        @media (max-width: 600px) {
+            body { padding: 10px; }
+            .input-row { flex-direction: column; align-items: stretch; }
+            input, select, button { width: 100%; height: 38px; margin-right: 0; }
+            .exercise-text { font-size: 10px; }
+            .summary-line { font-size: 10px; }
+        }
 
         /* PRINT SETTINGS */
         @media print {
             .drop-zone, .exercise-type-manager, .buttons, .section:has(.input-row), h1 { display: none !important; }
             .container { max-width: 100%; padding: 0; }
+            .heatmap-wrapper { border: none; overflow: visible; }
+            .heatmap-grid { min-width: auto; }
             .heatmap-cell { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
         }
     </style>
@@ -91,7 +127,7 @@
                 <h2 class="section-title">Summary & History Heatmaps</h2>
                 <div class="summary">
                     <div id="summaryContent"></div>
-                    <div id="multiHeatmapContainer"></div>
+                    <div id="multiHeatmapContainer" class="heatmap-container"></div>
                     <div class="buttons">
                         <button onclick="window.print()">Print PDF</button>
                         <button onclick="tracker.exportToCSV()">Export CSV</button>
@@ -229,11 +265,17 @@
                     const label = document.createElement('div');
                     label.className = 'heatmap-year-label';
                     label.innerText = `Year: ${year}`;
+                    
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'heatmap-wrapper';
+                    
                     const grid = document.createElement('div');
                     grid.className = 'heatmap-grid';
                     grid.innerHTML = this.generateYearGrid(year);
+                    
+                    wrapper.appendChild(grid);
                     container.appendChild(label);
-                    container.appendChild(grid);
+                    container.appendChild(wrapper);
                 });
             }
 
@@ -292,12 +334,11 @@
                 );
                 const csvContent = [h, ...r].join('\n');
                 
-                // Optimized for Mobile Safari/Chrome "Save to Files"
                 const blob = new Blob([csvContent], { type: 'application/octet-stream' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `workout_export_${new Date().toISOString().split('T')[0]}.csv`;
+                a.download = `workout_history_${new Date().toISOString().split('T')[0]}.csv`;
                 
                 document.body.appendChild(a);
                 a.click();
@@ -309,7 +350,6 @@
             }
         }
 
-        // Global Bridge for the onchange event
         const tracker = new ExerciseTracker();
 
         function handleFileImport(e) {
