@@ -1,9 +1,9 @@
 <html lang="en"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Exercise Tracker (Stateless)</title>
+    <title>Exercise Tracker (Full Stateless)</title>
     <style>
-        /* CSS adapted from original for mobile-friendly stateless use */
+        /* ALL ORIGINAL STYLES RESTORED */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Courier New', Monaco, monospace; background: white; color: black; padding: 20px; line-height: 1.6; font-size: 12px; }
         .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; }
@@ -28,10 +28,8 @@
         .buttons { text-align: center; margin-top: 15px; }
         .buttons button { margin: 0 5px; }
         .no-exercises { font-style: italic; text-align: center; margin-top: 50px; }
-        
-        /* New Stateless Components */
-        .drop-zone { border: 2px dashed black; padding: 40px; text-align: center; margin-bottom: 30px; background: #f9f9f9; cursor: pointer; font-weight: bold; }
-        .hidden { display: none !important; }
+        .exercise-type-manager { margin-bottom: 15px; border: 1px solid black; padding: 10px; }
+        .exercise-type-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; padding: 2px 5px; }
         .heatmap-grid { display: grid; grid-template-columns: repeat(31, 1fr); gap: 2px; border: 1px solid black; padding: 5px; }
         .heatmap-cell { width: 10px; height: 10px; border-radius: 2px; border: 1px solid #e5e7eb; }
         .level-0 { background-color: #ffffff; }
@@ -39,6 +37,8 @@
         .level-2 { background-color: #9ca3af; }
         .level-3 { background-color: #6b7280; }
         .level-4 { background-color: #000000; }
+        .drop-zone { border: 2px dashed black; padding: 40px; text-align: center; margin-bottom: 30px; background: #f9f9f9; cursor: pointer; font-weight: bold; }
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
@@ -46,28 +46,39 @@
         <h1>Exercise Tracker</h1>
 
         <div id="uploadPrompt" class="drop-zone" onclick="document.getElementById('csvFileInput').click()">
-            TAP HERE TO IMPORT YOUR EXERCISES.CSV<br>
-            <span style="font-weight: normal; font-size: 10px;">(Privacy: Processing happens in your browser; no data is sent to a server)</span>
+            TAP HERE TO IMPORT EXERCISES.CSV TO BEGIN<br>
+            <span style="font-weight: normal; font-size: 10px;">(Privacy: Everything stays in your browser)</span>
         </div>
 
         <div id="mainApp" class="hidden">
             <div class="section">
-                <h2 class="section-title">Add New Entry</h2>
+                <h2 class="section-title">Add Exercise</h2>
                 <div class="input-row">
                     <input type="date" id="exerciseDate">
                     <select id="exerciseTypeSelect"></select>
-                    <input type="number" id="exerciseDuration" placeholder="Minutes" min="1">
+                    <input type="number" id="exerciseDuration" placeholder="Minutes">
                     <button onclick="tracker.addExercise()">Add</button>
                 </div>
                 <textarea id="exerciseNotes" placeholder="Notes (optional)"></textarea>
             </div>
 
             <div class="section">
-                <h2 class="section-title">Reports & Sync</h2>
+                <h2 class="section-title">Exercise Types</h2>
+                <div class="exercise-type-manager">
+                    <div class="input-row">
+                        <input type="text" id="newExerciseType" placeholder="New type...">
+                        <button onclick="tracker.addExerciseType()">Add Type</button>
+                    </div>
+                    <div id="exerciseTypeList"></div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">Summary & Heatmap</h2>
                 <div class="summary">
                     <div id="summaryContent"></div>
                     <div class="buttons">
-                        <button onclick="window.print()">Print PDF</button>
+                        <button onclick="window.print()">Print</button>
                         <button onclick="tracker.exportToCSV()">Export Updated CSV</button>
                         <button onclick="location.reload()">Clear Session</button>
                     </div>
@@ -87,19 +98,12 @@
         class ExerciseTracker {
             constructor() {
                 this.exercises = [];
-                this.exerciseTypes = ['squash', 'cycling', 'gym', 'weights', 'pilates', 'swimming', 'running', 'hydrospeeding'];
+                this.exerciseTypes = ['cycling', 'gym', 'squash', 'running', 'pilates', 'swimming'];
                 this.setDefaultDate();
-                this.updateTypeSelect();
             }
 
             setDefaultDate() {
                 document.getElementById('exerciseDate').value = new Date().toISOString().split('T')[0];
-            }
-
-            updateTypeSelect() {
-                const select = document.getElementById('exerciseTypeSelect');
-                select.innerHTML = '<option value="">Select type...</option>' + 
-                    this.exerciseTypes.map(t => `<option value="${t}">${t}</option>`).join('');
             }
 
             addExercise() {
@@ -108,7 +112,7 @@
                 const duration = parseInt(document.getElementById('exerciseDuration').value);
                 const notes = document.getElementById('exerciseNotes').value.trim();
 
-                if (!date || !type || !duration) return alert('Please fill in Date, Type, and Duration.');
+                if (!date || !type || !duration) return alert('Missing info');
 
                 this.exercises.unshift({
                     id: Date.now(),
@@ -123,111 +127,161 @@
                 document.getElementById('exerciseNotes').value = '';
             }
 
-            // Core Stateless Logic: Import CSV to build the session
-            importFromCSV(csvText) {
-                const lines = csvText.trim().split('\n');
-                if (lines.length < 2) return alert('Invalid CSV file.');
-
-                const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-                const newExercises = [];
-
-                for (let i = 1; i < lines.length; i++) {
-                    const values = this.parseCSVLine(lines[i]);
-                    if (values.length >= 3) {
-                        newExercises.push({
-                            id: Date.now() + i,
-                            date: values[headers.indexOf('date')],
-                            exercise_type: values[headers.indexOf('exercise_type')],
-                            duration_minutes: parseInt(values[headers.indexOf('duration_minutes')]),
-                            notes: values[headers.indexOf('notes')] ? values[headers.indexOf('notes')].replace(/^"|"$/g, '') : ''
-                        });
-                    }
+            addExerciseType() {
+                const val = document.getElementById('newExerciseType').value.trim().toLowerCase();
+                if (val && !this.exerciseTypes.includes(val)) {
+                    this.exerciseTypes.push(val);
+                    this.updateDisplay();
+                    document.getElementById('newExerciseType').value = '';
                 }
-                this.exercises = newExercises;
-                document.getElementById('uploadPrompt').classList.add('hidden');
-                document.getElementById('mainApp').classList.remove('hidden');
+            }
+
+            deleteExerciseType(type) {
+                if (this.exercises.some(ex => ex.exercise_type === type)) return alert('Type in use');
+                this.exerciseTypes = this.exerciseTypes.filter(t => t !== type);
                 this.updateDisplay();
             }
 
-            parseCSVLine(line) {
-                const result = [];
-                let current = '', inQuotes = false;
-                for (let char of line) {
-                    if (char === '"') inQuotes = !inQuotes;
-                    else if (char === ',' && !inQuotes) { result.push(current); current = ''; }
-                    else current += char;
-                }
-                result.push(current);
-                return result;
-            }
-
-            exportToCSV() {
-                const headers = ['date', 'exercise_type', 'duration_minutes', 'notes'];
-                const rows = this.exercises.map(ex => [
-                    ex.date, ex.exercise_type, ex.duration_minutes, `"${ex.notes.replace(/"/g, '""')}"`
-                ].join(','));
-                
-                const blob = new Blob([[headers.join(','), ...rows].join('\n')], { type: 'text/csv' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `exercises_updated_${new Date().toISOString().split('T')[0]}.csv`;
-                a.click();
-            }
-
             deleteExercise(id) {
-                if (confirm('Delete this entry?')) {
+                if (confirm('Delete?')) {
                     this.exercises = this.exercises.filter(ex => ex.id !== id);
                     this.updateDisplay();
                 }
             }
 
-            updateDisplay() {
-                this.updateLog();
-                this.updateSummary();
+            formatExerciseLine(date, type, duration) {
+                const fmtDate = new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                const base = `${fmtDate} ${type} ${duration} min`;
+                const dashes = '-'.repeat(Math.max(5, 60 - base.length));
+                return `${fmtDate} ${type} ${dashes} ${duration} min`;
             }
 
-            updateLog() {
-                const container = document.getElementById('exerciseList');
-                container.innerHTML = this.exercises.map(ex => `
-                    <div class="exercise-entry">
-                        <div class="exercise-main">
-                            <div class="exercise-text">${ex.date} | ${ex.exercise_type.toUpperCase()} | ${ex.duration_minutes} min</div>
-                            <button class="delete-btn" onclick="tracker.deleteExercise(${ex.id})">Delete</button>
-                        </div>
-                        <div class="exercise-notes">${ex.notes}</div>
-                    </div>
+            updateDisplay() {
+                this.updateTypeUI();
+                this.updateLogUI();
+                this.updateSummaryUI();
+            }
+
+            updateTypeUI() {
+                const sel = document.getElementById('exerciseTypeSelect');
+                const cur = sel.value;
+                sel.innerHTML = '<option value="">Select type...</option>' + 
+                    this.exerciseTypes.sort().map(t => `<option value="${t}">${t}</option>`).join('');
+                if (this.exerciseTypes.includes(cur)) sel.value = cur;
+                
+                document.getElementById('exerciseTypeList').innerHTML = this.exerciseTypes.sort().map(t => `
+                    <div class="exercise-type-item"><span>${t}</span><button onclick="tracker.deleteExerciseType('${t}')">Del</button></div>
                 `).join('');
             }
 
-            updateSummary() {
+            updateLogUI() {
+                // Sort by date (newest first)
+                const sorted = [...this.exercises].sort((a,b) => new Date(b.date) - new Date(a.date));
+                document.getElementById('exerciseList').innerHTML = sorted.map(ex => `
+                    <div class="exercise-entry">
+                        <div class="exercise-main">
+                            <div class="exercise-text">${this.formatExerciseLine(ex.date, ex.exercise_type, ex.duration_minutes)}</div>
+                            <button class="delete-btn" onclick="tracker.deleteExercise(${ex.id})">Delete</button>
+                        </div>
+                        ${ex.notes ? `<div class="exercise-notes">${ex.notes}</div>` : ''}
+                    </div>
+                `).join('') || '<div class="no-exercises">No exercises added.</div>';
+            }
+
+            updateSummaryUI() {
+                // RESTORED: Instances and Minutes calculation
                 const stats = this.exercises.reduce((acc, ex) => {
-                    acc[ex.exercise_type] = (acc[ex.exercise_type] || 0) + ex.duration_minutes;
+                    if (!acc[ex.exercise_type]) acc[ex.exercise_type] = { count: 0, min: 0 };
+                    acc[ex.exercise_type].count++;
+                    acc[ex.exercise_type].min += ex.duration_minutes;
                     return acc;
                 }, {});
 
-                const lines = Object.entries(stats)
-                    .sort((a,b) => b[1] - a[1])
-                    .map(([type, min]) => `<div class="summary-line">${type} ---------------- ${min} min</div>`);
+                const lines = Object.entries(stats).sort((a,b) => b[1].min - a[1].min).map(([t, data]) => 
+                    `<div class="summary-line">${t} ------------------- ${data.count} sessions, ${data.min} min</div>`
+                ).join('');
 
                 document.getElementById('summaryContent').innerHTML = `
                     <div class="summary-section">
-                        <div class="summary-subtitle">Total Session Statistics</div>
-                        ${lines.join('') || 'No data recorded.'}
+                        <div class="summary-subtitle">Session Stats</div>
+                        ${lines || 'No data recorded.'}
+                    </div>
+                    <div class="heatmap-section">
+                        <h3>Activity Heatmap</h3>
+                        <div class="heatmap-grid">${this.generateHeatmapCells()}</div>
                     </div>
                 `;
+            }
+
+            generateHeatmapCells() {
+                const daily = this.exercises.reduce((acc, ex) => {
+                    acc[ex.date] = (acc[ex.date] || 0) + ex.duration_minutes;
+                    return acc;
+                }, {});
+                
+                let html = '';
+                const year = new Date().getFullYear();
+                for(let m=0; m<12; m++) {
+                    for(let d=1; d<=31; d++) {
+                        const dt = new Date(year, m, d);
+                        if(dt.getMonth() !== m) { html += '<div class="heatmap-cell level-0"></div>'; continue; }
+                        const str = dt.toISOString().split('T')[0];
+                        const mins = daily[str] || 0;
+                        const lvl = mins === 0 ? 0 : mins <= 30 ? 1 : mins <= 60 ? 2 : mins <= 120 ? 3 : 4;
+                        html += `<div class="heatmap-cell level-${lvl}" title="${str}: ${mins}min"></div>`;
+                    }
+                }
+                return html;
+            }
+
+            importFromCSV(csv) {
+                const lines = csv.trim().split('\n');
+                if (lines.length < 2) return;
+                const headers = lines[0].toLowerCase().split(',');
+                this.exercises = lines.slice(1).map(l => {
+                    const v = this.parseCSVLine(l);
+                    const type = v[headers.indexOf('exercise_type')];
+                    if (type && !this.exerciseTypes.includes(type)) this.exerciseTypes.push(type);
+                    return {
+                        id: Date.now() + Math.random(),
+                        date: v[headers.indexOf('date')],
+                        exercise_type: type,
+                        duration_minutes: parseInt(v[headers.indexOf('duration_minutes')]),
+                        notes: (v[headers.indexOf('notes')] || '').replace(/^"|"$/g, '')
+                    };
+                }).filter(ex => ex.date);
+                
+                document.getElementById('uploadPrompt').classList.add('hidden');
+                document.getElementById('mainApp').classList.remove('hidden');
+                this.updateDisplay();
+            }
+
+            parseCSVLine(l) {
+                const r = []; let c = '', q = false;
+                for(let char of l) {
+                    if(char === '"') q = !q;
+                    else if(char === ',' && !q) { r.push(c); c = ''; }
+                    else c += char;
+                }
+                r.push(c); return r;
+            }
+
+            exportToCSV() {
+                const h = 'date,exercise_type,duration_minutes,notes';
+                const r = this.exercises.map(ex => `${ex.date},${ex.exercise_type},${ex.duration_minutes},"${ex.notes.replace(/"/g, '""')}"`);
+                const blob = new Blob([[h, ...r].join('\n')], { type: 'text/csv' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `exercises_updated_${new Date().toISOString().split('T')[0]}.csv`;
+                a.click();
             }
         }
 
         const tracker = new ExerciseTracker();
-
-        // Helper for the file input trigger
-        function importFromCSV(event) {
-            const file = event.target.files[0];
-            if (!file) return;
+        function importFromCSV(e) {
             const reader = new FileReader();
-            reader.onload = (e) => tracker.importFromCSV(e.target.result);
-            reader.readAsText(file);
+            reader.onload = (evt) => tracker.importFromCSV(evt.target.result);
+            reader.readAsText(e.target.files[0]);
         }
     </script>
 </body></html>
