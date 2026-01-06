@@ -27,7 +27,7 @@
         /* LOG LIST STYLES */
         .exercise-list { margin-top: 15px; border: 1px solid black; padding: 10px; min-height: 200px; }
         .exercise-entry { margin-bottom: 15px; border-bottom: 1px dotted black; padding-bottom: 12px; display: flex; flex-direction: column; }
-        .exercise-text { font-family: 'Courier New', Monaco, monospace; white-space: pre-wrap; color: black; }
+        .exercise-text { font-family: 'Courier New', Monaco, monospace; white-space: pre-wrap; color: black; word-break: break-word; }
         .exercise-notes { margin-left: 20px; font-style: italic; color: #555; margin-bottom: 5px; }
         
         .delete-btn { 
@@ -35,14 +35,30 @@
             align-self: flex-start; width: auto; color: black; border: 1px solid black;
         }
 
-        /* SUMMARY & HEATMAP */
-        .summary { border: 2px solid black; padding: 15px; margin-top: 30px; }
+        /* SUMMARY STYLES - FIXED FOR MOBILE OVERFLOW */
+        .summary { border: 2px solid black; padding: 15px; margin-top: 30px; overflow-x: hidden; }
         .summary-group { margin-bottom: 25px; }
         .summary-subtitle { font-weight: bold; margin-bottom: 10px; text-decoration: underline; font-size: 13px; }
         .summary-total-line { margin-bottom: 8px; font-weight: normal; }
-        .summary-line { margin-bottom: 3px; font-size: 11px; white-space: pre; }
-        .buttons { text-align: center; margin-top: 15px; }
-        .buttons button { margin: 5px; }
+        
+        /* Flexbox for dashed lines prevents spillover */
+        .summary-line { 
+            display: flex; 
+            align-items: baseline; 
+            margin-bottom: 3px; 
+            font-size: 11px; 
+            width: 100%;
+            overflow: hidden;
+        }
+        .summary-label { flex-shrink: 0; white-space: nowrap; }
+        .summary-dash { 
+            flex-grow: 1; 
+            border-bottom: 1px dotted black; 
+            margin: 0 5px; 
+            position: relative;
+            top: -4px; /* Aligns dots with text middle */
+        }
+        .summary-stats { flex-shrink: 0; white-space: nowrap; text-align: right; }
 
         /* HEATMAP */
         .heatmap-container { margin-top: 20px; width: 100%; }
@@ -56,7 +72,6 @@
         .level-3 { background-color: #6b7280; }
         .level-4 { background-color: #000000; }
 
-        /* TYPE MANAGER */
         .exercise-type-manager { margin-bottom: 15px; border: 1px solid black; padding: 10px; }
         .exercise-type-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; padding: 2px 5px; border-bottom: 1px solid #eee; }
         .type-del-btn { padding: 1px 4px; font-size: 9px; margin-left: 15px; }
@@ -69,8 +84,8 @@
             body { padding: 10px; }
             .input-row { flex-direction: column; align-items: stretch; }
             input, select, .main-action-btn { width: 100%; height: 38px; margin-right: 0; }
-            .exercise-text { font-size: 11px; }
-            .delete-btn { margin-top: 10px; padding: 4px 12px; font-size: 10px; }
+            .summary-line { font-size: 10px; }
+            .summary-label { max-width: 40%; overflow: hidden; text-overflow: ellipsis; }
         }
 
         /* PRINT SETTINGS */
@@ -193,9 +208,7 @@
 
             formatExerciseLine(date, type, duration) {
                 const fmtDate = new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-                const base = `${fmtDate} ${type} ${duration} min`;
-                const dashes = '-'.repeat(Math.max(5, 60 - base.length));
-                return `${fmtDate} ${type} ${dashes} ${duration} min`;
+                return `${fmtDate} ${type} — ${duration} min`;
             }
 
             updateDisplay() {
@@ -231,7 +244,6 @@
                 const thirtyDaysAgo = new Date().setDate(now.getDate() - 30);
                 const ninetyDaysAgo = new Date().setDate(now.getDate() - 90);
 
-                // Find earliest entry date
                 let startDateText = "";
                 if (this.exercises.length > 0) {
                     const sortedAsc = [...this.exercises].sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -269,12 +281,13 @@
 
             renderSummarySection(title, data) {
                 const sortedTypes = Object.entries(data.breakdown).sort((a,b) => b[1].min - a[1].min);
-                const lines = sortedTypes.map(([type, d]) => {
-                    const leftSide = `${type} `;
-                    const rightSide = ` ${d.count} sessions, ${d.min} min`;
-                    const dashes = '-'.repeat(Math.max(2, 50 - (leftSide.length + rightSide.length)));
-                    return `<div class="summary-line">${leftSide}${dashes}${rightSide}</div>`;
-                }).join('');
+                const lines = sortedTypes.map(([type, d]) => `
+                    <div class="summary-line">
+                        <span class="summary-label">${type}</span>
+                        <span class="summary-dash"></span>
+                        <span class="summary-stats">${d.count} sessions, ${d.min} min</span>
+                    </div>
+                `).join('');
 
                 return `
                     <div class="summary-group">
