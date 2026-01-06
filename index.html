@@ -1,4 +1,4 @@
-<! DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en" dir="ltr">
 <head>
     <meta charset="UTF-8">
@@ -7,16 +7,16 @@
     <style>
         /* CORE STYLES */
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body { font-family: 'Courier New', Monaco, monospace; background:  white; color: black; padding: 20px; line-height: 1.6; font-size: 12px; }
+        body { font-family: 'Courier New', Monaco, monospace; background: white; color: black; padding: 20px; line-height: 1.6; font-size: 12px; }
         .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; }
         h1 { text-align: center; margin-bottom: 20px; font-weight: normal; color: black; }
-        . section { margin-bottom:  30px; }
+        .section { margin-bottom: 30px; }
         .section-title { margin-bottom: 15px; text-decoration: underline; }
-        .input-row { margin-bottom:  10px; display: flex; flex-wrap: wrap; gap:  5px; align-items: center; }
+        .input-row { margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
         
         input, select, textarea, button { 
             font-family: 'Courier New', Monaco, monospace; 
-            border:  1px solid black; padding: 4px; font-size: 12px; 
+            border: 1px solid black; padding: 4px; font-size: 12px; 
             color: black; background: white; border-radius: 0; appearance: none;
         }
         
@@ -25,8 +25,8 @@
         button:hover { background: #f0f0f0; }
 
         /* LOG LIST STYLES */
-        .exercise-list { margin-top:  15px; border:  1px solid black; padding: 10px; min-height: 200px; }
-        .exercise-entry { margin-bottom:  15px; border-bottom: 1px dotted black; padding-bottom: 12px; display: flex; flex-direction: column; }
+        .exercise-list { margin-top: 15px; border: 1px solid black; padding: 10px; min-height: 200px; }
+        .exercise-entry { margin-bottom: 15px; border-bottom: 1px dotted black; padding-bottom: 12px; display: flex; flex-direction: column; }
         .exercise-text { font-family: 'Courier New', Monaco, monospace; white-space: pre-wrap; color: black; word-break: break-word; }
         .exercise-notes { margin-left: 20px; font-style: italic; color: #555; margin-bottom: 5px; }
         
@@ -37,12 +37,12 @@
 
         /* SUMMARY STYLES - FIXED FOR MOBILE OVERFLOW */
         .summary { border: 2px solid black; padding: 15px; margin-top: 30px; overflow-x: hidden; }
-        . summary-group { margin-bottom:  25px; }
+        .summary-group { margin-bottom: 25px; }
         .summary-subtitle { font-weight: bold; margin-bottom: 10px; text-decoration: underline; font-size: 13px; }
         .summary-total-line { margin-bottom: 8px; font-weight: normal; }
         
         /* Flexbox for dashed lines prevents spillover */
-        . summary-line { 
+        .summary-line { 
             display: flex; 
             align-items: baseline; 
             margin-bottom: 3px; 
@@ -50,11 +50,11 @@
             width: 100%;
             overflow: hidden;
         }
-        . summary-label { flex-shrink: 0; white-space: nowrap; }
-        . summary-dash { 
+        .summary-label { flex-shrink: 0; white-space: nowrap; }
+        .summary-dash { 
             flex-grow: 1; 
             border-bottom: 1px dotted black; 
-            margin:  0 5px; 
+            margin: 0 5px; 
             position: relative;
             top: -4px; /* Aligns dots with text middle */
         }
@@ -62,27 +62,27 @@
 
         /* HEATMAP */
         .heatmap-container { margin-top: 20px; width: 100%; }
-        .heatmap-year-label { font-weight:  bold; margin-top: 15px; margin-bottom: 5px; text-decoration: underline; }
+        .heatmap-year-label { font-weight: bold; margin-top: 15px; margin-bottom: 5px; text-decoration: underline; }
         .heatmap-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid #eee; padding: 5px; margin-bottom: 15px; }
         .heatmap-grid { display: grid; grid-template-columns: repeat(31, 1fr); gap: 2px; min-width: 450px; }
         .heatmap-cell { width: 10px; height: 10px; border-radius: 2px; border: 1px solid #e5e7eb; }
         .level-0 { background-color: #ffffff; }
-        . level-1 { background-color: #d1d5db; }
+        .level-1 { background-color: #d1d5db; }
         .level-2 { background-color: #9ca3af; }
         .level-3 { background-color: #6b7280; }
         .level-4 { background-color: #000000; }
 
-        . exercise-type-manager { margin-bottom: 15px; border: 1px solid black; padding: 10px; }
+        .exercise-type-manager { margin-bottom: 15px; border: 1px solid black; padding: 10px; }
         .exercise-type-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; padding: 2px 5px; border-bottom: 1px solid #eee; }
         .type-del-btn { padding: 1px 4px; font-size: 9px; margin-left: 15px; }
 
         .drop-zone { border: 2px dashed black; padding: 40px; text-align: center; margin-bottom: 10px; background: #f9f9f9; font-weight: bold; }
-        .hidden { display: none ! important; }
+        .hidden { display: none !important; }
 
         /* VISUALLY HIDDEN - Accessible but not visible */
         .visually-hidden {
             position: absolute;
-            width:  1px;
+            width: 1px;
             height: 1px;
             padding: 0;
             margin: -1px;
@@ -96,7 +96,7 @@
         @media (max-width: 600px) {
             body { padding: 10px; }
             .input-row { flex-direction: column; align-items: stretch; }
-            input, select, . main-action-btn { width: 100%; height: 38px; margin-right: 0; }
+            input, select, .main-action-btn { width: 100%; height: 38px; margin-right: 0; }
             .summary-line { font-size: 10px; }
             .summary-label { max-width: 40%; overflow: hidden; text-overflow: ellipsis; }
         }
@@ -104,7 +104,7 @@
         /* PRINT SETTINGS */
         @media print {
             .drop-zone, .exercise-type-manager, .buttons, .section:has(.input-row), h1, .delete-btn, .type-del-btn { display: none !important; }
-            .container { max-width:  100%; padding: 0; }
+            .container { max-width: 100%; padding: 0; }
             .heatmap-wrapper { border: none; overflow: visible; }
             .heatmap-grid { min-width: auto; }
             .heatmap-cell { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
@@ -142,7 +142,7 @@
                 <div class="exercise-type-manager">
                     <div class="input-row">
                         <label for="newExerciseType" class="visually-hidden">New Exercise Type</label>
-                        <input type="text" id="newExerciseType" placeholder="New type... ">
+                        <input type="text" id="newExerciseType" placeholder="New type...">
                         <button type="button" class="type-add-btn" onclick="tracker.addExerciseType()">Add Type</button>
                     </div>
                     <div id="exerciseTypeList"></div>
@@ -174,7 +174,7 @@
     <script>
         class ExerciseTracker {
             constructor() {
-                this. exercises = [];
+                this.exercises = [];
                 this.exerciseTypes = ['cycling', 'gym', 'squash', 'running', 'pilates', 'swimming'];
                 this.setDefaultDate();
             }
@@ -202,15 +202,15 @@
                 const notes = document.getElementById('exerciseNotes').value.trim();
                 if (!date || !type || !duration) return alert('Fill required fields');
                 this.exercises.unshift({ id: Date.now(), date, exercise_type: type, duration_minutes: duration, notes });
-                this. updateDisplay();
+                this.updateDisplay();
                 document.getElementById('exerciseDuration').value = '';
-                document. getElementById('exerciseNotes').value = '';
+                document.getElementById('exerciseNotes').value = '';
             }
 
             addExerciseType() {
                 const val = document.getElementById('newExerciseType').value.trim().toLowerCase();
-                if (val && ! this.exerciseTypes.includes(val)) {
-                    this.exerciseTypes. push(val);
+                if (val && !this.exerciseTypes.includes(val)) {
+                    this.exerciseTypes.push(val);
                     this.updateDisplay();
                     document.getElementById('newExerciseType').value = '';
                 }
@@ -218,12 +218,12 @@
 
             deleteExerciseType(type) {
                 if (this.exercises.some(ex => ex.exercise_type === type)) return alert('In use');
-                this.exerciseTypes = this. exerciseTypes.filter(t => t !== type);
+                this.exerciseTypes = this.exerciseTypes.filter(t => t !== type);
                 this.updateDisplay();
             }
 
             deleteExercise(id) {
-                if (confirm('Delete? ')) {
+                if (confirm('Delete?')) {
                     this.exercises = this.exercises.filter(ex => ex.id !== id);
                     this.updateDisplay();
                 }
@@ -232,35 +232,35 @@
             formatExerciseLine(date, type, duration) {
                 const [year, month, day] = date.split('-');
                 const fmtDate = new Date(year, month - 1, day).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-                return `${fmtDate} ${this. escapeHtml(type)} — ${duration} min`;
+                return `${fmtDate} ${this.escapeHtml(type)} — ${duration} min`;
             }
 
             updateDisplay() {
                 this.updateTypeUI();
-                this. updateLogUI();
-                this. updateSummaryUI();
+                this.updateLogUI();
+                this.updateSummaryUI();
             }
 
             updateTypeUI() {
                 const sel = document.getElementById('exerciseTypeSelect');
                 const cur = sel.value;
-                sel.innerHTML = '<option value="">Select... </option>' + 
-                    this. exerciseTypes.sort().map(t => `<option value="${this.escapeHtml(t)}">${this.escapeHtml(t)}</option>`).join('');
+                sel.innerHTML = '<option value="">Select...</option>' + 
+                    this.exerciseTypes.sort().map(t => `<option value="${this.escapeHtml(t)}">${this.escapeHtml(t)}</option>`).join('');
                 if (this.exerciseTypes.includes(cur)) sel.value = cur;
-                document.getElementById('exerciseTypeList').innerHTML = this.exerciseTypes. sort().map(t => `
+                document.getElementById('exerciseTypeList').innerHTML = this.exerciseTypes.sort().map(t => `
                     <div class="exercise-type-item"><span>${this.escapeHtml(t)}</span><button type="button" class="type-del-btn" aria-label="Delete exercise type ${this.escapeHtml(t)}" onclick="tracker.deleteExerciseType('${this.escapeHtml(t)}')">DEL</button></div>
                 `).join('');
             }
 
             updateLogUI() {
-                const sorted = [... this.exercises].sort((a,b) => new Date(b.date) - new Date(a.date));
+                const sorted = [...this.exercises].sort((a,b) => new Date(b.date) - new Date(a.date));
                 document.getElementById('exerciseList').innerHTML = sorted.map(ex => `
                     <div class="exercise-entry">
                         <div class="exercise-text">${this.formatExerciseLine(ex.date, ex.exercise_type, ex.duration_minutes)}</div>
                         ${ex.notes ? `<div class="exercise-notes">${this.escapeHtml(ex.notes)}</div>` : ''}
                         <button type="button" class="delete-btn" aria-label="Delete ${this.escapeHtml(ex.exercise_type)} exercise from ${ex.date}" onclick="tracker.deleteExercise(${ex.id})">DELETE</button>
                     </div>
-                `).join('') || '<div class="no-exercises">Empty session. </div>';
+                `).join('') || '<div class="no-exercises">Empty session.</div>';
             }
 
             updateSummaryUI() {
@@ -272,21 +272,21 @@
 
                 let startDateText = "";
                 if (this.exercises.length > 0) {
-                    const sortedAsc = [... this.exercises].sort((a, b) => new Date(a.date) - new Date(b.date));
-                    const [year, month, day] = sortedAsc[0].date. split('-');
-                    const firstDate = new Date(year, month - 1, day).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year:  'numeric' });
+                    const sortedAsc = [...this.exercises].sort((a, b) => new Date(a.date) - new Date(b.date));
+                    const [year, month, day] = sortedAsc[0].date.split('-');
+                    const firstDate = new Date(year, month - 1, day).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
                     startDateText = ` (since ${firstDate})`;
                 }
 
                 const stats = {
-                    last30:  this.calculateGroupStats(this.exercises.filter(ex => new Date(ex. date) >= thirtyDaysAgo)),
-                    last90: this.calculateGroupStats(this.exercises.filter(ex => new Date(ex. date) >= ninetyDaysAgo)),
-                    allData: this.calculateGroupStats(this. exercises)
+                    last30: this.calculateGroupStats(this.exercises.filter(ex => new Date(ex.date) >= thirtyDaysAgo)),
+                    last90: this.calculateGroupStats(this.exercises.filter(ex => new Date(ex.date) >= ninetyDaysAgo)),
+                    allData: this.calculateGroupStats(this.exercises)
                 };
 
                 document.getElementById('summaryContent').innerHTML = `
                     ${this.renderSummarySection("Last 30 Days", stats.last30)}
-                    ${this.renderSummarySection("Last 90 Days", stats. last90)}
+                    ${this.renderSummarySection("Last 90 Days", stats.last90)}
                     ${this.renderSummarySection(`All Data Summary${startDateText}`, stats.allData)}
                 `;
                 this.renderHeatmaps();
@@ -294,9 +294,9 @@
 
             calculateGroupStats(exercises) {
                 const group = exercises.reduce((acc, ex) => {
-                    if (!acc[ex. exercise_type]) acc[ex.exercise_type] = { count: 0, min: 0 };
+                    if (!acc[ex.exercise_type]) acc[ex.exercise_type] = { count: 0, min: 0 };
                     acc[ex.exercise_type].count++;
-                    acc[ex.exercise_type]. min += ex.duration_minutes;
+                    acc[ex.exercise_type].min += ex.duration_minutes;
                     return acc;
                 }, {});
                 
@@ -307,7 +307,7 @@
             }
 
             renderSummarySection(title, data) {
-                const sortedTypes = Object.entries(data. breakdown).sort((a,b) => b[1]. min - a[1]. min);
+                const sortedTypes = Object.entries(data.breakdown).sort((a,b) => b[1].min - a[1].min);
                 const lines = sortedTypes.map(([type, d]) => `
                     <div class="summary-line">
                         <span class="summary-label">${this.escapeHtml(type)}</span>
@@ -320,7 +320,7 @@
                     <div class="summary-group">
                         <div class="summary-subtitle">${this.escapeHtml(title)}</div>
                         <div class="summary-total-line">Total exercises: ${data.typeCount} types, ${data.totalMins} minutes</div>
-                        ${lines || '<div class="summary-line">No data for this period. </div>'}
+                        ${lines || '<div class="summary-line">No data for this period.</div>'}
                     </div>
                 `;
             }
@@ -328,12 +328,12 @@
             renderHeatmaps() {
                 const container = document.getElementById('multiHeatmapContainer');
                 container.innerHTML = '';
-                const years = [... new Set(this. exercises.map(ex => new Date(ex.date).getFullYear()))].sort((a, b) => b - a);
+                const years = [...new Set(this.exercises.map(ex => new Date(ex.date).getFullYear()))].sort((a, b) => b - a);
                 if (years.length === 0) years.push(new Date().getFullYear());
                 years.forEach(year => {
                     const label = document.createElement('div');
                     label.className = 'heatmap-year-label';
-                    label.innerText = `Year:  ${year}`;
+                    label.innerText = `Year: ${year}`;
                     const wrapper = document.createElement('div');
                     wrapper.className = 'heatmap-wrapper';
                     const grid = document.createElement('div');
@@ -346,7 +346,7 @@
             }
 
             generateYearGrid(year) {
-                const daily = this.exercises. reduce((acc, ex) => {
+                const daily = this.exercises.reduce((acc, ex) => {
                     acc[ex.date] = (acc[ex.date] || 0) + ex.duration_minutes;
                     return acc;
                 }, {});
@@ -357,8 +357,8 @@
                         if(dt.getMonth() !== m) { html += '<div class="heatmap-cell level-0"></div>'; continue; }
                         const str = `${year}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
                         const mins = daily[str] || 0;
-                        const lvl = mins === 0 ? 0 : mins <= 30 ? 1 : mins <= 60 ?  2 : mins <= 120 ? 3 : 4;
-                        html += `<div class="heatmap-cell level-${lvl}" title="${str}:  ${mins}min"></div>`;
+                        const lvl = mins === 0 ? 0 : mins <= 30 ? 1 : mins <= 60 ? 2 : mins <= 120 ? 3 : 4;
+                        html += `<div class="heatmap-cell level-${lvl}" title="${str}: ${mins}min"></div>`;
                     }
                 }
                 return html;
@@ -368,10 +368,10 @@
                 const lines = csv.trim().split('\n');
                 if (lines.length < 2) return;
                 const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
-                this.exercises = lines. slice(1).map(l => {
+                this.exercises = lines.slice(1).map(l => {
                     const v = this.parseCSVLine(l);
                     const type = v[headers.indexOf('exercise_type')];
-                    if (type && !this.exerciseTypes.includes(type)) this.exerciseTypes. push(type);
+                    if (type && !this.exerciseTypes.includes(type)) this.exerciseTypes.push(type);
                     return {
                         id: Date.now() + Math.random(),
                         date: v[headers.indexOf('date')],
@@ -390,17 +390,17 @@
                     else if(char === ',' && !q) { r.push(c); c = ''; }
                     else c += char;
                 }
-                r. push(c); return r;
+                r.push(c); return r;
             }
 
             exportToCSV() {
                 const h = 'date,exercise_type,duration_minutes,notes';
-                const r = this.exercises. map(ex => `${ex.date},${ex.exercise_type},${ex. duration_minutes},"${(ex.notes || '').replace(/"/g, '""')}"`);
+                const r = this.exercises.map(ex => `${ex.date},${ex.exercise_type},${ex.duration_minutes},"${(ex.notes || '').replace(/"/g, '""')}"`);
                 const csvContent = [h, ...r].join('\n');
                 const blob = new Blob([csvContent], { type: 'application/octet-stream' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
-                a. href = url;
+                a.href = url;
                 a.download = `workout_history_${new Date().toISOString().split('T')[0]}.csv`;
                 document.body.appendChild(a);
                 a.click();
@@ -414,7 +414,7 @@
             if (!file) return;
             const reader = new FileReader();
             reader.onload = (evt) => tracker.importCSV(evt.target.result);
-            reader. readAsText(file);
+            reader.readAsText(file);
         }
     </script>
 </body>
