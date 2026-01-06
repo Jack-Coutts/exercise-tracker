@@ -8,7 +8,7 @@
         /* CORE STYLES */
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { font-family: 'Courier New', Monaco, monospace; background:  white; color: black; padding: 20px; line-height: 1.6; font-size: 12px; }
-        . container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; }
         h1 { text-align: center; margin-bottom: 20px; font-weight: normal; color: black; }
         . section { margin-bottom:  30px; }
         .section-title { margin-bottom: 15px; text-decoration: underline; }
@@ -30,7 +30,7 @@
         .exercise-text { font-family: 'Courier New', Monaco, monospace; white-space: pre-wrap; color: black; word-break: break-word; }
         .exercise-notes { margin-left: 20px; font-style: italic; color: #555; margin-bottom: 5px; }
         
-        . delete-btn { 
+        .delete-btn { 
             padding: 2px 8px; font-size: 9px; margin-top: 8px; 
             align-self: flex-start; width: auto; color: black; border: 1px solid black;
         }
@@ -103,7 +103,7 @@
 
         /* PRINT SETTINGS */
         @media print {
-            .drop-zone, .exercise-type-manager, .buttons, .section: has(. input-row), h1, .delete-btn, .type-del-btn { display: none ! important; }
+            .drop-zone, .exercise-type-manager, .buttons, .section:has(.input-row), h1, .delete-btn, .type-del-btn { display: none !important; }
             .container { max-width:  100%; padding: 0; }
             .heatmap-wrapper { border: none; overflow: visible; }
             .heatmap-grid { min-width: auto; }
