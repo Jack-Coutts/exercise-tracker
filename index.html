@@ -240,9 +240,9 @@
                     <div class="exercise-entry">
                         <div class="exercise-main">
                             <div class="exercise-text">${this.formatExerciseLine(ex.date, ex.exercise_type, ex.duration_minutes)}</div>
-                            <button class="delete-btn" onclick="tracker.deleteExercise(${ex.id})">DELETE</button>
                         </div>
                         ${ex.notes ? `<div class="exercise-notes">${ex.notes}</div>` : ''}
+                        <button class="delete-btn" onclick="tracker.deleteExercise(${ex.id})">DELETE</button>
                     </div>
                 `).join('') || '<div class="no-exercises">Empty session.</div>';
             }
