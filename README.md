@@ -25,7 +25,7 @@ If you want to see how the app looks with data already in it:
 ### 2. How to use the app every day
 Because the app doesn't "remember" you (for privacy), you follow this simple 3-step cycle: 
 
-1. **OPEN & UPLOAD:** Open the [Tracker Link](https://anon-anon-111.github.io/exercise-tracker/) and tap the "Import" box.  Select your `exercises.csv` file. Your history and maps will instantly appear. 
+1. **OPEN & UPLOAD:** Open the [Tracker Link](https://jack-coutts.github.io/exercise-tracker/) and tap the "Import" box.  Select your `exercises.csv` file. Your history and maps will instantly appear. 
 2. **LOG:** Add your new workout for today (type, minutes, and any notes).
 3. **SAVE & DOWNLOAD:** This is the most important step!  Tap **"Export CSV"**. This saves a *new* version of your file to your device.  You can delete the old one. 
 
@@ -57,16 +57,23 @@ The consistency heatmaps show your daily activity with varying intensity:
 | Color | Minutes Exercised |
 |-------|-------------------|
 | White | 0 min (no activity) |
-| Light Gray | 1–30 min |
-| Medium Gray | 31–60 min |
-| Dark Gray | 61–120 min |
-| Black | 120+ min |
+| Light Gray | 1–45 min |
+| Medium Gray | 46–90 min |
+| Dark Gray | 91–135 min |
+| Black | 136+ min |
 
 ### Summary Statistics
-View your exercise breakdown across three time periods: 
-- **Last 30 Days** — Recent activity
-- **Last 90 Days** — Quarter overview
-- **All Data** — Complete history since your first entry
+View your exercise breakdown:
+- **Total Sessions** — All recorded workouts
+- **Total Time** — Combined exercise duration
+- **Current Streak** — Consecutive days exercised
+- **Longest Streak** — Best streak achieved
+- **Longest Break** — Longest gap between workouts
+- **Top Exercise** — Most frequently done activity
+- **Active Days** — Unique days with exercise
+- **Avg min/session** — Average duration per workout
+- **Avg sessions/week** — Average workouts per week
+- **Avg time/week** — Average time exercised per week
 
 ---
 
