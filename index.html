@@ -15,13 +15,13 @@
         .section { margin-bottom: 30px; }
         .section-title { margin-bottom: 15px; text-decoration: underline; }
         .input-row { margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-        
-        input, select, textarea, button { 
-            font-family: 'Courier New', Monaco, monospace; 
-            border: 1px solid black; padding: 4px; font-size: 12px; 
+
+        input, select, textarea, button {
+            font-family: 'Courier New', Monaco, monospace;
+            border: 1px solid black; padding: 4px; font-size: 12px;
             color: black; background: white; border-radius: 0; appearance: none;
         }
-        
+
         textarea { width: 100%; min-height: 40px; resize: vertical; margin-top: 5px; }
         button { cursor: pointer; transition: background 0.2s; }
         button:hover { background: #f0f0f0; }
@@ -31,9 +31,9 @@
         .exercise-entry { margin-bottom: 15px; border-bottom: 1px dotted black; padding-bottom: 12px; display: flex; flex-direction: column; }
         .exercise-text { font-family: 'Courier New', Monaco, monospace; white-space: pre-wrap; color: black; word-break: break-word; }
         .exercise-notes { margin-left: 20px; font-style: italic; color: #555; margin-bottom: 5px; }
-        
-        .delete-btn { 
-            padding: 2px 8px; font-size: 9px; margin-top: 8px; 
+
+        .delete-btn {
+            padding: 2px 8px; font-size: 9px; margin-top: 8px;
             align-self: flex-start; width: auto; color: black; border: 1px solid black;
         }
 
@@ -42,21 +42,21 @@
         .summary-group { margin-bottom: 25px; }
         .summary-subtitle { font-weight: bold; margin-bottom: 10px; text-decoration: underline; font-size: 13px; }
         .summary-total-line { margin-bottom: 8px; font-weight: normal; }
-        
+
         /* Flexbox for dashed lines prevents spillover */
-        .summary-line { 
-            display: flex; 
-            align-items: baseline; 
-            margin-bottom: 3px; 
-            font-size: 11px; 
+        .summary-line {
+            display: flex;
+            align-items: baseline;
+            margin-bottom: 3px;
+            font-size: 11px;
             width: 100%;
             overflow: hidden;
         }
         .summary-label { flex-shrink: 0; white-space: nowrap; }
-        .summary-dash { 
-            flex-grow: 1; 
-            border-bottom: 1px dotted black; 
-            margin: 0 5px; 
+        .summary-dash {
+            flex-grow: 1;
+            border-bottom: 1px dotted black;
+            margin: 0 5px;
             position: relative;
             top: -4px; /* Aligns dots with text middle */
         }
@@ -69,16 +69,16 @@
         .heatmap-row { display: flex; align-items: center; margin-bottom: 1px; }
         .heatmap-day-label { width: 14px; font-size: 10px; margin-right: 6px; flex-shrink: 0; }
         .heatmap-week-container { display: flex; gap: 2px; }
-        .heatmap-cell { width: 10px; height: 10px; border-radius: 2px; border: 1px solid #ccc; }
-        .level-0 { background-color: #f5f5f5; }
-        .level-1 { background-color: #b0b0b0; }
-        .level-2 { background-color: #808080; }
-        .level-3 { background-color: #505050; }
+        .heatmap-cell { width: 11px; height: 11px; border-radius: 2px; border: 1px solid #ccc; }
+        .level-0 { background-color: #ffffff; }
+        .level-1 { background-color: #c0c0c0; }
+        .level-2 { background-color: #909090; }
+        .level-3 { background-color: #606060; }
         .level-4 { background-color: #000000; }
-        
+
         .heatmap-footer { display: flex; align-items: center; margin-top: 12px; gap: 15px; }
-        .heatmap-legend { display: flex; align-items: center; gap: 3px; }
-        .heatmap-legend-label { font-size: 9px; margin-right: 3px; color: #666; }
+        .heatmap-legend { display: flex; align-items: center; gap: 2px; }
+        .heatmap-legend-label { font-size: 8px; color: #666; }
         .heatmap-note { font-size: 9px; color: #666; }
 
         .exercise-type-manager { margin-bottom: 15px; border: 1px solid black; padding: 10px; }
@@ -112,29 +112,29 @@
 
         /* PRINT SETTINGS */
         .print-header { display: none; }
-        
+
         @media print {
             .drop-zone, .exercise-type-manager, .buttons, .section:has(.input-row), h1, .delete-btn, .type-del-btn { display: none !important; }
             .container { max-width: 100%; padding: 0; }
             .heatmap-wrapper { border: none; overflow: visible; }
             .heatmap-cell { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
             .heatmap-container { page-break-inside: avoid; }
-            .heatmap-cell { width: 8px; height: 8px; }
+            .heatmap-cell { width: 10px; height: 10px; }
             .heatmap-row { margin-bottom: 1px; }
             .heatmap-day-label { width: 12px; font-size: 8px; margin-right: 4px; }
             .heatmap-week-container { gap: 1px; }
-            
+
             /* Print header */
-            .print-header { 
-                display: block; 
-                text-align: center; 
-                margin-bottom: 20px; 
-                padding-bottom: 10px; 
-                border-bottom: 1px solid black; 
+            .print-header {
+                display: block;
+                text-align: center;
+                margin-bottom: 20px;
+                padding-bottom: 10px;
+                border-bottom: 1px solid black;
             }
             .print-header h1 { display: block; margin-bottom: 5px; }
             .print-header .date-range { font-size: 11px; color: #555; }
-            
+
             /* Page break handling */
             .exercise-entry { break-inside: avoid; }
             .summary-group { break-inside: avoid; }
@@ -156,7 +156,7 @@
                 <h1>Exercise Tracker</h1>
                 <div class="date-range" id="printDateRange"></div>
             </div>
-            
+
             <div class="section">
                 <h2 class="section-title">Add Exercise</h2>
                 <div class="input-row">
@@ -279,7 +279,7 @@
             updateTypeUI() {
                 const sel = document.getElementById('exerciseTypeSelect');
                 const cur = sel.value;
-                sel.innerHTML = '<option value="">Select...</option>' + 
+                sel.innerHTML = '<option value="">Select...</option>' +
                     this.exerciseTypes.sort().map(t => `<option value="${this.escapeHtml(t)}">${this.escapeHtml(t)}</option>`).join('');
                 if (this.exerciseTypes.includes(cur)) sel.value = cur;
                 document.getElementById('exerciseTypeList').innerHTML = this.exerciseTypes.sort().map(t => `
@@ -315,7 +315,7 @@
                     const firstDate = new Date(year1, month1 - 1, day1).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
                     const lastDate = new Date(year2, month2 - 1, day2).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
                     startDateText = ` (since ${firstDate})`;
-                    printDateRange = `${firstDate} — ${lastDate} (${this.exercises.length} exercises)`;
+                    printDateRange = `${firstDate} — ${lastDate} (${this.exercises.length} exercise sessions)`;
                 }
                 document.getElementById('printDateRange').textContent = printDateRange;
 
@@ -340,10 +340,10 @@
                     acc[ex.exercise_type].min += ex.duration_minutes;
                     return acc;
                 }, {});
-                
+
                 const totalMins = exercises.reduce((sum, ex) => sum + ex.duration_minutes, 0);
                 const typeCount = Object.keys(group).length;
-                
+
                 return { breakdown: group, totalMins, typeCount };
             }
 
@@ -388,12 +388,12 @@
                     acc[ex.date] = (acc[ex.date] || 0) + ex.duration_minutes;
                     return acc;
                 }, {});
-                
+
                 const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
                 const weeks = [];
                 const firstDay = new Date(year, 0, 1).getDay();
                 const startOffset = firstDay === 0 ? 6 : firstDay - 1;
-                
+
                 for (let w = 0; w < 53; w++) {
                     const weekData = [];
                     for (let d = 0; d < 7; d++) {
@@ -404,13 +404,13 @@
                             const dt = new Date(year, 0, dayNum + 1);
                             const str = `${year}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
                             const mins = daily[str] || 0;
-                            const lvl = mins === 0 ? 0 : mins <= 30 ? 1 : mins <= 60 ? 2 : mins <= 120 ? 3 : 4;
+                            const lvl = mins === 0 ? 0 : mins <= 45 ? 1 : mins <= 90 ? 2 : mins <= 135 ? 3 : 4;
                             weekData.push({ valid: true, lvl, str, mins });
                         }
                     }
                     weeks.push(weekData);
                 }
-                
+
                 let html = '';
                 for (let d = 0; d < 7; d++) {
                     html += `<div class="heatmap-row"><span class="heatmap-day-label">${dayLabels[d]}</span><div class="heatmap-week-container">`;
@@ -424,22 +424,23 @@
                     }
                     html += '</div></div>';
                 }
-                
+
                 html += `
                     <div class="heatmap-footer">
                         <div class="heatmap-legend">
-                            <span class="heatmap-legend-label">Less</span>
-                            <div class="heatmap-cell level-0"></div>
                             <div class="heatmap-cell level-1"></div>
+                            <span class="heatmap-legend-label">45</span>
                             <div class="heatmap-cell level-2"></div>
+                            <span class="heatmap-legend-label">90</span>
                             <div class="heatmap-cell level-3"></div>
+                            <span class="heatmap-legend-label">135</span>
                             <div class="heatmap-cell level-4"></div>
-                            <span class="heatmap-legend-label">More</span>
+                            <span class="heatmap-legend-label">136+</span>
                         </div>
                         <span class="heatmap-note">7 days of the week x 52 weeks of the year</span>
                     </div>
                 `;
-                
+
                 return html;
             }
 
