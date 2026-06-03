@@ -110,6 +110,7 @@
         .level-2 { background-color: #909090; }
         .level-3 { background-color: #606060; }
         .level-4 { background-color: #000000; }
+        .level-sick { background-color: var(--danger); }
 
         .heatmap-footer { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 12px; }
         .heatmap-legend { display: flex; align-items: center; gap: 3px; }
@@ -207,6 +208,9 @@
                 print-color-adjust: exact; 
                 -webkit-print-color-adjust: exact; 
             }
+            .heatmap-cell.level-sick {
+                background-color: #dc2626;
+            }
             .heatmap-day-label { font-size: 8px; width: 12px; }
             .heatmap-footer { margin-top: 8px; }
             .heatmap-legend-label { font-size: 8px; }
@@ -291,10 +295,12 @@
     </div>
 
     <script>
+        const SICK_TYPE = 'off sick';
+
         class ExerciseTracker {
             constructor() {
                 this.exercises = [];
-                this.exerciseTypes = ['cycling', 'gym', 'squash', 'running', 'pilates', 'swimming'];
+                this.exerciseTypes = ['cycling', 'gym', 'squash', 'running', 'pilates', 'swimming', SICK_TYPE];
                 this.filterText = '';
                 this.filterTypeValue = '';
                 this.setDefaultDate();
@@ -316,12 +322,34 @@
                 this.updateDisplay();
             }
 
+            isSickType(type) {
+                return type && type.trim().toLowerCase() === SICK_TYPE;
+            }
+
+            getStatsExercises() {
+                return this.exercises.filter(ex => !this.isSickType(ex.exercise_type));
+            }
+
+            hasExerciseOnDate(dateStr) {
+                return this.exercises.some(ex => ex.date === dateStr && !this.isSickType(ex.exercise_type));
+            }
+
+            isSickOnlyDate(dateStr) {
+                const dayEx = this.exercises.filter(ex => ex.date === dateStr);
+                return dayEx.length > 0 && dayEx.every(ex => this.isSickType(ex.exercise_type));
+            }
+
+            dateToStr(d) {
+                return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            }
+
             addExercise() {
                 const date = document.getElementById('exerciseDate').value;
                 const type = document.getElementById('exerciseTypeSelect').value;
-                const duration = parseInt(document.getElementById('exerciseDuration').value);
+                const isSick = this.isSickType(type);
+                const duration = isSick ? 0 : parseInt(document.getElementById('exerciseDuration').value);
                 const notes = document.getElementById('exerciseNotes').value.trim();
-                if (!date || !type || !duration) return alert('Please fill in all required fields');
+                if (!date || !type || (!isSick && !duration)) return alert('Please fill in all required fields');
                 this.exercises.unshift({ id: Date.now(), date, exercise_type: type, duration_minutes: duration, notes });
                 this.updateDisplay();
                 document.getElementById('exerciseDuration').value = '';
@@ -330,6 +358,7 @@
 
             addExerciseType() {
                 const val = document.getElementById('newExerciseType').value.trim().toLowerCase();
+                if (val === SICK_TYPE) return;
                 if (val && !this.exerciseTypes.includes(val)) {
                     this.exerciseTypes.push(val);
                     this.updateDisplay();
@@ -338,6 +367,7 @@
             }
 
             deleteExerciseType(type) {
+                if (this.isSickType(type)) return;
                 if (this.exercises.some(ex => ex.exercise_type === type)) return alert('Cannot delete type that is in use');
                 this.exerciseTypes = this.exerciseTypes.filter(t => t !== type);
                 this.updateDisplay();
@@ -385,12 +415,25 @@
                 sel.innerHTML = '<option value="">Select type...</option>' + 
                     sorted.map(t => `<option value="${this.escapeHtml(t)}">${this.escapeHtml(t)}</option>`).join('');
                 if (sorted.includes(cur)) sel.value = cur;
+                sel.onchange = () => this.updateDurationField();
+                this.updateDurationField();
                 document.getElementById('exerciseTypeList').innerHTML = sorted.map(t => `
                     <div class="exercise-type-tag">
                         <span>${this.escapeHtml(t)}</span>
-                        <button onclick="tracker.deleteExerciseType('${this.escapeHtml(t)}')" title="Delete type">&times;</button>
+                        ${this.isSickType(t) ? '' : `<button onclick="tracker.deleteExerciseType('${this.escapeHtml(t)}')" title="Delete type">&times;</button>`}
                     </div>
                 `).join('');
+            }
+
+            updateDurationField() {
+                const type = document.getElementById('exerciseTypeSelect').value;
+                const durationEl = document.getElementById('exerciseDuration');
+                if (this.isSickType(type)) {
+                    durationEl.classList.add('hidden');
+                    durationEl.value = '';
+                } else {
+                    durationEl.classList.remove('hidden');
+                }
             }
 
             updateFilterOptions() {
@@ -416,7 +459,7 @@
                         <div class="exercise-info">
                             <div class="exercise-date">${this.formatDate(ex.date)}</div>
                             <div class="exercise-type">${this.escapeHtml(ex.exercise_type)}</div>
-                            <div class="exercise-duration">${ex.duration_minutes} minutes</div>
+                            ${this.isSickType(ex.exercise_type) ? '' : `<div class="exercise-duration">${ex.duration_minutes} minutes</div>`}
                             ${ex.notes ? `<div class="exercise-notes">${this.escapeHtml(ex.notes)}</div>` : ''}
                         </div>
                         <div class="exercise-actions">
@@ -427,24 +470,24 @@
             }
 
             calculateStreak() {
-                if (this.exercises.length === 0) return 0;
-                const sorted = [...this.exercises].sort((a,b) => new Date(b.date) - new Date(a.date));
-                const dates = [...new Set(sorted.map(ex => ex.date))].sort().reverse();
+                if (this.getStatsExercises().length === 0) return 0;
+
+                let d = new Date();
+                d.setHours(0, 0, 0, 0);
+
+                if (!this.hasExerciseOnDate(this.dateToStr(d)) && !this.isSickOnlyDate(this.dateToStr(d))) {
+                    d.setDate(d.getDate() - 1);
+                    if (!this.hasExerciseOnDate(this.dateToStr(d)) && !this.isSickOnlyDate(this.dateToStr(d))) return 0;
+                }
+
                 let streak = 0;
-                let currentDate = new Date();
-                currentDate.setHours(0,0,0,0);
-                
-                for (let i = 0; i < dates.length; i++) {
-                    const exerciseDate = new Date(dates[i]);
-                    exerciseDate.setHours(0,0,0,0);
-                    const expectedDate = new Date(currentDate);
-                    expectedDate.setDate(expectedDate.getDate() - i);
-                    
-                    if (exerciseDate.getTime() === expectedDate.getTime()) {
+                while (true) {
+                    const dateStr = this.dateToStr(d);
+                    if (this.hasExerciseOnDate(dateStr)) {
                         streak++;
-                    } else if (i === 0 && exerciseDate.getTime() === expectedDate.getTime() - 86400000) {
-                        currentDate = exerciseDate;
-                        streak = 1;
+                        d.setDate(d.getDate() - 1);
+                    } else if (this.isSickOnlyDate(dateStr)) {
+                        d.setDate(d.getDate() - 1);
                     } else {
                         break;
                     }
@@ -453,17 +496,28 @@
             }
 
             calculateLongestStreak() {
-                if (this.exercises.length === 0) return 0;
-                const sorted = [...this.exercises].sort((a,b) => new Date(a.date) - new Date(b.date));
-                const dates = [...new Set(sorted.map(ex => ex.date))].sort();
+                const dates = [...new Set(this.getStatsExercises().map(ex => ex.date))].sort();
+                if (dates.length === 0) return 0;
+                if (dates.length === 1) return 1;
+
                 let longest = 1, current = 1;
-                
                 for (let i = 1; i < dates.length; i++) {
-                    const prev = new Date(dates[i-1]);
+                    const prev = new Date(dates[i - 1]);
                     const curr = new Date(dates[i]);
-                    const diffDays = Math.round((curr - prev) / 86400000);
-                    
-                    if (diffDays === 1) {
+                    let canContinue = curr - prev === 86400000;
+
+                    if (!canContinue) {
+                        canContinue = true;
+                        for (let t = prev.getTime() + 86400000; t < curr.getTime(); t += 86400000) {
+                            const ds = this.dateToStr(new Date(t));
+                            if (!this.isSickOnlyDate(ds)) {
+                                canContinue = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (canContinue) {
                         current++;
                         longest = Math.max(longest, current);
                     } else {
@@ -474,28 +528,31 @@
             }
 
             calculateWeeklyAverage() {
-                if (this.exercises.length === 0) return 0;
-                const sorted = [...this.exercises].sort((a,b) => new Date(a.date) - new Date(b.date));
+                const stats = this.getStatsExercises();
+                if (stats.length === 0) return 0;
+                const sorted = [...stats].sort((a,b) => new Date(a.date) - new Date(b.date));
                 const firstDate = new Date(sorted[0].date);
                 const lastDate = new Date(sorted[sorted.length - 1].date);
                 const weeks = Math.max(1, Math.ceil((lastDate - firstDate) / (7 * 86400000)));
-                const totalMins = this.exercises.reduce((sum, ex) => sum + ex.duration_minutes, 0);
+                const totalMins = stats.reduce((sum, ex) => sum + ex.duration_minutes, 0);
                 return Math.round(totalMins / weeks);
             }
 
             calculateAvgSessionsPerWeek() {
-                if (this.exercises.length === 0) return 0;
-                const sorted = [...this.exercises].sort((a,b) => new Date(a.date) - new Date(b.date));
+                const stats = this.getStatsExercises();
+                if (stats.length === 0) return 0;
+                const sorted = [...stats].sort((a,b) => new Date(a.date) - new Date(b.date));
                 const firstDate = new Date(sorted[0].date);
                 const lastDate = new Date(sorted[sorted.length - 1].date);
                 const weeks = Math.max(1, Math.ceil((lastDate - firstDate) / (7 * 86400000)));
-                return (this.exercises.length / weeks).toFixed(1);
+                return (stats.length / weeks).toFixed(1);
             }
 
             calculateMostFrequentType() {
-                if (this.exercises.length === 0) return '-';
+                const stats = this.getStatsExercises();
+                if (stats.length === 0) return '-';
                 const counts = {};
-                this.exercises.forEach(ex => {
+                stats.forEach(ex => {
                     counts[ex.exercise_type] = (counts[ex.exercise_type] || 0) + 1;
                 });
                 const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
@@ -503,26 +560,35 @@
             }
 
             calculateTotalActiveDays() {
-                return new Set(this.exercises.map(ex => ex.date)).size;
+                return new Set(this.getStatsExercises().map(ex => ex.date)).size;
             }
 
             calculateAvgDurationPerSession() {
-                if (this.exercises.length === 0) return 0;
-                const totalMins = this.exercises.reduce((sum, ex) => sum + ex.duration_minutes, 0);
-                return Math.round(totalMins / this.exercises.length);
+                const stats = this.getStatsExercises();
+                if (stats.length === 0) return 0;
+                const totalMins = stats.reduce((sum, ex) => sum + ex.duration_minutes, 0);
+                return Math.round(totalMins / stats.length);
             }
 
             calculateLongestBreak() {
-                if (this.exercises.length < 2) return 0;
-                const sorted = [...this.exercises].sort((a,b) => new Date(a.date) - new Date(b.date));
+                const dates = [...new Set(this.getStatsExercises().map(ex => ex.date))].sort();
+                if (dates.length < 2) return 0;
                 let maxBreak = 0;
-                for (let i = 1; i < sorted.length; i++) {
-                    const prev = new Date(sorted[i-1].date);
-                    const curr = new Date(sorted[i].date);
-                    const diffDays = Math.round((curr - prev) / 86400000);
-                    if (diffDays > maxBreak) maxBreak = diffDays;
+                for (let i = 1; i < dates.length; i++) {
+                    const prev = new Date(dates[i - 1]);
+                    const curr = new Date(dates[i]);
+                    let breakDays = 0;
+                    for (let t = prev.getTime() + 86400000; t < curr.getTime(); t += 86400000) {
+                        const ds = this.dateToStr(new Date(t));
+                        if (!this.isSickOnlyDate(ds)) breakDays++;
+                    }
+                    if (breakDays > maxBreak) maxBreak = breakDays;
                 }
                 return maxBreak;
+            }
+
+            calculateSickDays() {
+                return new Set(this.exercises.filter(ex => this.isSickType(ex.exercise_type)).map(ex => ex.date)).size;
             }
 
             updateSummaryUI() {
@@ -543,18 +609,20 @@
 
                 let startDateText = "";
                 let printDateRange = "";
-                if (this.exercises.length > 0) {
-                    const sortedAsc = [...this.exercises].sort((a, b) => new Date(a.date) - new Date(b.date));
-                    const sortedDesc = [...this.exercises].sort((a, b) => new Date(b.date) - new Date(a.date));
+                const statsExercises = this.getStatsExercises();
+                if (statsExercises.length > 0) {
+                    const sortedAsc = [...statsExercises].sort((a, b) => new Date(a.date) - new Date(b.date));
+                    const sortedDesc = [...statsExercises].sort((a, b) => new Date(b.date) - new Date(a.date));
                     const firstDate = this.formatDate(sortedAsc[0].date);
                     const lastDate = this.formatDate(sortedDesc[0].date);
                     startDateText = ` (since ${firstDate})`;
-                    printDateRange = `${firstDate} — ${lastDate} (${this.exercises.length} sessions)`;
+                    printDateRange = `${firstDate} — ${lastDate} (${statsExercises.length} sessions)`;
                 }
                 document.getElementById('printDateRange').textContent = printDateRange;
 
-                const totalMins = this.exercises.reduce((sum, ex) => sum + ex.duration_minutes, 0);
-                const totalSessions = this.exercises.length;
+                const totalMins = statsExercises.reduce((sum, ex) => sum + ex.duration_minutes, 0);
+                const totalSessions = statsExercises.length;
+                const sickDays = this.calculateSickDays();
 
                 document.getElementById('statsGrid').innerHTML = `
                     <div class="stat-card">
@@ -600,13 +668,13 @@
                 `;
 
                 const stats = {
-                    last30: this.calculateGroupStats(this.exercises.filter(ex => new Date(ex.date) >= thirtyDaysAgo)),
-                    last90: this.calculateGroupStats(this.exercises.filter(ex => new Date(ex.date) >= ninetyDaysAgo)),
-                    allData: this.calculateGroupStats(this.exercises)
+                    last30: this.calculateGroupStats(statsExercises.filter(ex => new Date(ex.date) >= thirtyDaysAgo)),
+                    last90: this.calculateGroupStats(statsExercises.filter(ex => new Date(ex.date) >= ninetyDaysAgo)),
+                    allData: this.calculateGroupStats(statsExercises)
                 };
 
                 document.getElementById('summaryContent').innerHTML = `
-                    ${this.renderSummarySection(`All Time${startDateText}`, stats.allData)}
+                    ${this.renderSummarySection(`All Time${startDateText}`, stats.allData, sickDays)}
                 `;
                 this.renderHeatmaps();
             }
@@ -626,7 +694,7 @@
                 return { breakdown: group, totalMins, totalSessions, typeCount };
             }
 
-            renderSummarySection(title, data) {
+            renderSummarySection(title, data, sickDays = 0) {
                 const sortedTypes = Object.entries(data.breakdown).sort((a,b) => b[1].min - a[1].min);
                 const totalMins = data.totalMins;
                 
@@ -643,6 +711,13 @@
                     `;
                 }).join('');
 
+                const sickLine = sickDays > 0 ? `
+                    <div class="summary-item">
+                        <span class="summary-item-type">${this.escapeHtml(SICK_TYPE)}</span>
+                        <span class="summary-item-stats">${sickDays} day${sickDays === 1 ? '' : 's'} (excluded from stats)</span>
+                    </div>
+                ` : '';
+
                 return `
                     <div class="summary-section">
                         <div class="summary-title">${this.escapeHtml(title)}</div>
@@ -654,6 +729,7 @@
                                 </div>
                             ` : ''}
                             ${lines || '<div class="summary-item"><span class="summary-item-stats">No exercises</span></div>'}
+                            ${sickLine}
                         </div>
                     </div>
                 `;
@@ -680,28 +756,38 @@
             }
 
             generateYearGrid(year) {
-                const daily = this.exercises.reduce((acc, ex) => {
-                    acc[ex.date] = (acc[ex.date] || 0) + ex.duration_minutes;
-                    return acc;
-                }, {});
+                const daily = {};
+                const sickDays = new Set();
+                this.exercises.forEach(ex => {
+                    if (this.isSickType(ex.exercise_type)) {
+                        sickDays.add(ex.date);
+                    } else {
+                        daily[ex.date] = (daily[ex.date] || 0) + ex.duration_minutes;
+                    }
+                });
 
                 const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
                 const weeks = [];
                 const firstDay = new Date(year, 0, 1).getDay();
                 const startOffset = firstDay === 0 ? 6 : firstDay - 1;
+                const daysInYear = new Date(year, 1, 29).getDate() === 29 ? 366 : 365;
 
                 for (let w = 0; w < 53; w++) {
                     const weekData = [];
                     for (let d = 0; d < 7; d++) {
                         const dayNum = w * 7 + d - startOffset;
-                        if (dayNum < 0 || dayNum >= 365) {
+                        if (dayNum < 0 || dayNum >= daysInYear) {
                             weekData.push({ valid: false });
                         } else {
                             const dt = new Date(year, 0, dayNum + 1);
                             const str = `${year}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-                            const mins = daily[str] || 0;
-                            const lvl = mins === 0 ? 0 : mins <= 45 ? 1 : mins <= 90 ? 2 : mins <= 135 ? 3 : 4;
-                            weekData.push({ valid: true, lvl, str, mins });
+                            if (sickDays.has(str)) {
+                                weekData.push({ valid: true, sick: true, str });
+                            } else {
+                                const mins = daily[str] || 0;
+                                const lvl = mins === 0 ? 0 : mins <= 45 ? 1 : mins <= 90 ? 2 : mins <= 135 ? 3 : 4;
+                                weekData.push({ valid: true, sick: false, lvl, str, mins });
+                            }
                         }
                     }
                     weeks.push(weekData);
@@ -713,7 +799,11 @@
                     for (let w = 0; w < 53; w++) {
                         const cell = weeks[w][d];
                         if (cell.valid) {
-                            html += `<div class="heatmap-cell level-${cell.lvl}" title="${cell.str}: ${cell.mins}min"></div>`;
+                            if (cell.sick) {
+                                html += `<div class="heatmap-cell level-sick" title="${cell.str}: off sick"></div>`;
+                            } else {
+                                html += `<div class="heatmap-cell level-${cell.lvl}" title="${cell.str}: ${cell.mins}min"></div>`;
+                            }
                         } else {
                             html += `<div class="heatmap-cell level-0" style="visibility: hidden;"></div>`;
                         }
@@ -732,6 +822,8 @@
                             <span class="heatmap-legend-label">135</span>
                             <div class="heatmap-cell level-4"></div>
                             <span class="heatmap-legend-label">136+</span>
+                            <div class="heatmap-cell level-sick"></div>
+                            <span class="heatmap-legend-label">sick</span>
                         </div>
                         <span class="heatmap-note">7 days × 52 weeks</span>
                     </div>
@@ -746,16 +838,18 @@
                 const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
                 this.exercises = lines.slice(1).map(l => {
                     const v = this.parseCSVLine(l);
-                    const type = v[headers.indexOf('exercise_type')];
+                    const rawType = v[headers.indexOf('exercise_type')];
+                    const type = rawType && this.isSickType(rawType) ? SICK_TYPE : rawType;
                     if (type && !this.exerciseTypes.includes(type)) this.exerciseTypes.push(type);
                     return {
                         id: Date.now() + Math.random(),
                         date: v[headers.indexOf('date')],
                         exercise_type: type,
-                        duration_minutes: parseInt(v[headers.indexOf('duration_minutes')]),
+                        duration_minutes: type === SICK_TYPE ? 0 : parseInt(v[headers.indexOf('duration_minutes')]),
                         notes: (v[headers.indexOf('notes')] || '').replace(/^"|"$/g, '')
                     };
                 }).filter(ex => ex.date);
+                if (!this.exerciseTypes.includes(SICK_TYPE)) this.exerciseTypes.push(SICK_TYPE);
                 this.startFresh();
             }
 
