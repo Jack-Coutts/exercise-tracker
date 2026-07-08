@@ -257,6 +257,10 @@
                     <input type="date" id="exerciseDate">
                     <select id="exerciseTypeSelect"></select>
                     <input type="number" id="exerciseDuration" placeholder="Duration (minutes)">
+                    <div id="exerciseDateEndWrap" class="hidden" style="display: flex; align-items: center; gap: 8px;">
+                        <span style="color: var(--text-muted); font-size: 13px;">until</span>
+                        <input type="date" id="exerciseDateEnd" title="Last day off (optional)" style="flex: 1;">
+                    </div>
                     <button onclick="tracker.addExercise()">Add Exercise</button>
                 </div>
                 <textarea id="exerciseNotes" placeholder="Notes (optional)"></textarea>
@@ -364,10 +368,36 @@
                 const duration = isOff ? 0 : parseInt(document.getElementById('exerciseDuration').value);
                 const notes = document.getElementById('exerciseNotes').value.trim();
                 if (!date || !type || (!isOff && !duration)) return alert('Please fill in all required fields');
-                this.exercises.unshift({ id: Date.now(), date, exercise_type: type, duration_minutes: duration, notes });
+
+                const endDate = isOff ? document.getElementById('exerciseDateEnd').value : '';
+                const range = this.getDateRange(date, endDate || date);
+                if (range.length === 0) return;
+                for (const d of range) {
+                    if (isOff && this.exercises.some(ex => ex.date === d && ex.exercise_type === type)) continue;
+                    this.exercises.unshift({ id: Date.now() + Math.random(), date: d, exercise_type: type, duration_minutes: duration, notes });
+                }
+
                 this.updateDisplay();
                 document.getElementById('exerciseDuration').value = '';
+                document.getElementById('exerciseDateEnd').value = '';
                 document.getElementById('exerciseNotes').value = '';
+            }
+
+            getDateRange(startStr, endStr) {
+                if (endStr < startStr) {
+                    alert('End date must be on or after the start date');
+                    return [];
+                }
+                const dates = [];
+                const d = new Date(startStr + 'T00:00:00');
+                const end = new Date(endStr + 'T00:00:00');
+                const maxDays = 366;
+                while (d <= end && dates.length < maxDays) {
+                    dates.push(this.dateToStr(d));
+                    d.setDate(d.getDate() + 1);
+                }
+                if (d <= end) alert(`Range too long — only the first ${maxDays} days were added`);
+                return dates;
             }
 
             addExerciseType() {
@@ -442,11 +472,15 @@
             updateDurationField() {
                 const type = document.getElementById('exerciseTypeSelect').value;
                 const durationEl = document.getElementById('exerciseDuration');
+                const endDateWrap = document.getElementById('exerciseDateEndWrap');
                 if (this.isOffType(type)) {
                     durationEl.classList.add('hidden');
                     durationEl.value = '';
+                    endDateWrap.classList.remove('hidden');
                 } else {
                     durationEl.classList.remove('hidden');
+                    endDateWrap.classList.add('hidden');
+                    document.getElementById('exerciseDateEnd').value = '';
                 }
             }
 
