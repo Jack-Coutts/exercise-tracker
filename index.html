@@ -111,6 +111,7 @@
         .level-3 { background-color: #606060; }
         .level-4 { background-color: #000000; }
         .level-sick { background-color: var(--danger); }
+        .level-holiday { background-color: #2563eb; }
 
         .heatmap-footer { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 12px; }
         .heatmap-legend { display: flex; align-items: center; gap: 3px; }
@@ -211,6 +212,9 @@
             .heatmap-cell.level-sick {
                 background-color: #dc2626;
             }
+            .heatmap-cell.level-holiday {
+                background-color: #2563eb;
+            }
             .heatmap-day-label { font-size: 8px; width: 12px; }
             .heatmap-footer { margin-top: 8px; }
             .heatmap-legend-label { font-size: 8px; }
@@ -296,11 +300,13 @@
 
     <script>
         const SICK_TYPE = 'off sick';
+        const HOLIDAY_TYPE = 'on holiday';
+        const OFF_TYPES = [SICK_TYPE, HOLIDAY_TYPE];
 
         class ExerciseTracker {
             constructor() {
                 this.exercises = [];
-                this.exerciseTypes = ['cycling', 'gym', 'squash', 'running', 'pilates', 'swimming', SICK_TYPE];
+                this.exerciseTypes = ['cycling', 'gym', 'squash', 'running', 'pilates', 'swimming', SICK_TYPE, HOLIDAY_TYPE];
                 this.filterText = '';
                 this.filterTypeValue = '';
                 this.setDefaultDate();
@@ -326,17 +332,25 @@
                 return type && type.trim().toLowerCase() === SICK_TYPE;
             }
 
+            isHolidayType(type) {
+                return type && type.trim().toLowerCase() === HOLIDAY_TYPE;
+            }
+
+            isOffType(type) {
+                return this.isSickType(type) || this.isHolidayType(type);
+            }
+
             getStatsExercises() {
-                return this.exercises.filter(ex => !this.isSickType(ex.exercise_type));
+                return this.exercises.filter(ex => !this.isOffType(ex.exercise_type));
             }
 
             hasExerciseOnDate(dateStr) {
-                return this.exercises.some(ex => ex.date === dateStr && !this.isSickType(ex.exercise_type));
+                return this.exercises.some(ex => ex.date === dateStr && !this.isOffType(ex.exercise_type));
             }
 
-            isSickOnlyDate(dateStr) {
+            isOffOnlyDate(dateStr) {
                 const dayEx = this.exercises.filter(ex => ex.date === dateStr);
-                return dayEx.length > 0 && dayEx.every(ex => this.isSickType(ex.exercise_type));
+                return dayEx.length > 0 && dayEx.every(ex => this.isOffType(ex.exercise_type));
             }
 
             dateToStr(d) {
@@ -346,10 +360,10 @@
             addExercise() {
                 const date = document.getElementById('exerciseDate').value;
                 const type = document.getElementById('exerciseTypeSelect').value;
-                const isSick = this.isSickType(type);
-                const duration = isSick ? 0 : parseInt(document.getElementById('exerciseDuration').value);
+                const isOff = this.isOffType(type);
+                const duration = isOff ? 0 : parseInt(document.getElementById('exerciseDuration').value);
                 const notes = document.getElementById('exerciseNotes').value.trim();
-                if (!date || !type || (!isSick && !duration)) return alert('Please fill in all required fields');
+                if (!date || !type || (!isOff && !duration)) return alert('Please fill in all required fields');
                 this.exercises.unshift({ id: Date.now(), date, exercise_type: type, duration_minutes: duration, notes });
                 this.updateDisplay();
                 document.getElementById('exerciseDuration').value = '';
@@ -358,7 +372,7 @@
 
             addExerciseType() {
                 const val = document.getElementById('newExerciseType').value.trim().toLowerCase();
-                if (val === SICK_TYPE) return;
+                if (OFF_TYPES.includes(val)) return;
                 if (val && !this.exerciseTypes.includes(val)) {
                     this.exerciseTypes.push(val);
                     this.updateDisplay();
@@ -367,7 +381,7 @@
             }
 
             deleteExerciseType(type) {
-                if (this.isSickType(type)) return;
+                if (this.isOffType(type)) return;
                 if (this.exercises.some(ex => ex.exercise_type === type)) return alert('Cannot delete type that is in use');
                 this.exerciseTypes = this.exerciseTypes.filter(t => t !== type);
                 this.updateDisplay();
@@ -420,7 +434,7 @@
                 document.getElementById('exerciseTypeList').innerHTML = sorted.map(t => `
                     <div class="exercise-type-tag">
                         <span>${this.escapeHtml(t)}</span>
-                        ${this.isSickType(t) ? '' : `<button onclick="tracker.deleteExerciseType('${this.escapeHtml(t)}')" title="Delete type">&times;</button>`}
+                        ${this.isOffType(t) ? '' : `<button onclick="tracker.deleteExerciseType('${this.escapeHtml(t)}')" title="Delete type">&times;</button>`}
                     </div>
                 `).join('');
             }
@@ -428,7 +442,7 @@
             updateDurationField() {
                 const type = document.getElementById('exerciseTypeSelect').value;
                 const durationEl = document.getElementById('exerciseDuration');
-                if (this.isSickType(type)) {
+                if (this.isOffType(type)) {
                     durationEl.classList.add('hidden');
                     durationEl.value = '';
                 } else {
@@ -459,7 +473,7 @@
                         <div class="exercise-info">
                             <div class="exercise-date">${this.formatDate(ex.date)}</div>
                             <div class="exercise-type">${this.escapeHtml(ex.exercise_type)}</div>
-                            ${this.isSickType(ex.exercise_type) ? '' : `<div class="exercise-duration">${ex.duration_minutes} minutes</div>`}
+                            ${this.isOffType(ex.exercise_type) ? '' : `<div class="exercise-duration">${ex.duration_minutes} minutes</div>`}
                             ${ex.notes ? `<div class="exercise-notes">${this.escapeHtml(ex.notes)}</div>` : ''}
                         </div>
                         <div class="exercise-actions">
@@ -475,9 +489,9 @@
                 let d = new Date();
                 d.setHours(0, 0, 0, 0);
 
-                if (!this.hasExerciseOnDate(this.dateToStr(d)) && !this.isSickOnlyDate(this.dateToStr(d))) {
+                if (!this.hasExerciseOnDate(this.dateToStr(d)) && !this.isOffOnlyDate(this.dateToStr(d))) {
                     d.setDate(d.getDate() - 1);
-                    if (!this.hasExerciseOnDate(this.dateToStr(d)) && !this.isSickOnlyDate(this.dateToStr(d))) return 0;
+                    if (!this.hasExerciseOnDate(this.dateToStr(d)) && !this.isOffOnlyDate(this.dateToStr(d))) return 0;
                 }
 
                 let streak = 0;
@@ -486,7 +500,7 @@
                     if (this.hasExerciseOnDate(dateStr)) {
                         streak++;
                         d.setDate(d.getDate() - 1);
-                    } else if (this.isSickOnlyDate(dateStr)) {
+                    } else if (this.isOffOnlyDate(dateStr)) {
                         d.setDate(d.getDate() - 1);
                     } else {
                         break;
@@ -510,7 +524,7 @@
                         canContinue = true;
                         for (let t = prev.getTime() + 86400000; t < curr.getTime(); t += 86400000) {
                             const ds = this.dateToStr(new Date(t));
-                            if (!this.isSickOnlyDate(ds)) {
+                            if (!this.isOffOnlyDate(ds)) {
                                 canContinue = false;
                                 break;
                             }
@@ -580,7 +594,7 @@
                     let breakDays = 0;
                     for (let t = prev.getTime() + 86400000; t < curr.getTime(); t += 86400000) {
                         const ds = this.dateToStr(new Date(t));
-                        if (!this.isSickOnlyDate(ds)) breakDays++;
+                        if (!this.isOffOnlyDate(ds)) breakDays++;
                     }
                     if (breakDays > maxBreak) maxBreak = breakDays;
                 }
@@ -589,6 +603,10 @@
 
             calculateSickDays() {
                 return new Set(this.exercises.filter(ex => this.isSickType(ex.exercise_type)).map(ex => ex.date)).size;
+            }
+
+            calculateHolidayDays() {
+                return new Set(this.exercises.filter(ex => this.isHolidayType(ex.exercise_type)).map(ex => ex.date)).size;
             }
 
             updateSummaryUI() {
@@ -623,6 +641,7 @@
                 const totalMins = statsExercises.reduce((sum, ex) => sum + ex.duration_minutes, 0);
                 const totalSessions = statsExercises.length;
                 const sickDays = this.calculateSickDays();
+                const holidayDays = this.calculateHolidayDays();
 
                 document.getElementById('statsGrid').innerHTML = `
                     <div class="stat-card">
@@ -674,7 +693,7 @@
                 };
 
                 document.getElementById('summaryContent').innerHTML = `
-                    ${this.renderSummarySection(`All Time${startDateText}`, stats.allData, sickDays)}
+                    ${this.renderSummarySection(`All Time${startDateText}`, stats.allData, sickDays, holidayDays)}
                 `;
                 this.renderHeatmaps();
             }
@@ -694,7 +713,7 @@
                 return { breakdown: group, totalMins, totalSessions, typeCount };
             }
 
-            renderSummarySection(title, data, sickDays = 0) {
+            renderSummarySection(title, data, sickDays = 0, holidayDays = 0) {
                 const sortedTypes = Object.entries(data.breakdown).sort((a,b) => b[1].min - a[1].min);
                 const totalMins = data.totalMins;
                 
@@ -718,6 +737,13 @@
                     </div>
                 ` : '';
 
+                const holidayLine = holidayDays > 0 ? `
+                    <div class="summary-item">
+                        <span class="summary-item-type">${this.escapeHtml(HOLIDAY_TYPE)}</span>
+                        <span class="summary-item-stats">${holidayDays} day${holidayDays === 1 ? '' : 's'} (excluded from stats)</span>
+                    </div>
+                ` : '';
+
                 return `
                     <div class="summary-section">
                         <div class="summary-title">${this.escapeHtml(title)}</div>
@@ -730,6 +756,7 @@
                             ` : ''}
                             ${lines || '<div class="summary-item"><span class="summary-item-stats">No exercises</span></div>'}
                             ${sickLine}
+                            ${holidayLine}
                         </div>
                     </div>
                 `;
@@ -758,9 +785,12 @@
             generateYearGrid(year) {
                 const daily = {};
                 const sickDays = new Set();
+                const holidayDays = new Set();
                 this.exercises.forEach(ex => {
                     if (this.isSickType(ex.exercise_type)) {
                         sickDays.add(ex.date);
+                    } else if (this.isHolidayType(ex.exercise_type)) {
+                        holidayDays.add(ex.date);
                     } else {
                         daily[ex.date] = (daily[ex.date] || 0) + ex.duration_minutes;
                     }
@@ -783,10 +813,12 @@
                             const str = `${year}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
                             if (sickDays.has(str)) {
                                 weekData.push({ valid: true, sick: true, str });
+                            } else if (holidayDays.has(str)) {
+                                weekData.push({ valid: true, holiday: true, str });
                             } else {
                                 const mins = daily[str] || 0;
                                 const lvl = mins === 0 ? 0 : mins <= 45 ? 1 : mins <= 90 ? 2 : mins <= 135 ? 3 : 4;
-                                weekData.push({ valid: true, sick: false, lvl, str, mins });
+                                weekData.push({ valid: true, lvl, str, mins });
                             }
                         }
                     }
@@ -801,6 +833,8 @@
                         if (cell.valid) {
                             if (cell.sick) {
                                 html += `<div class="heatmap-cell level-sick" title="${cell.str}: off sick"></div>`;
+                            } else if (cell.holiday) {
+                                html += `<div class="heatmap-cell level-holiday" title="${cell.str}: on holiday"></div>`;
                             } else {
                                 html += `<div class="heatmap-cell level-${cell.lvl}" title="${cell.str}: ${cell.mins}min"></div>`;
                             }
@@ -824,6 +858,8 @@
                             <span class="heatmap-legend-label">136+</span>
                             <div class="heatmap-cell level-sick"></div>
                             <span class="heatmap-legend-label">sick</span>
+                            <div class="heatmap-cell level-holiday"></div>
+                            <span class="heatmap-legend-label">holiday</span>
                         </div>
                         <span class="heatmap-note">7 days × 52 weeks</span>
                     </div>
@@ -839,17 +875,19 @@
                 this.exercises = lines.slice(1).map(l => {
                     const v = this.parseCSVLine(l);
                     const rawType = v[headers.indexOf('exercise_type')];
-                    const type = rawType && this.isSickType(rawType) ? SICK_TYPE : rawType;
+                    let type = rawType;
+                    if (rawType && this.isSickType(rawType)) type = SICK_TYPE;
+                    else if (rawType && this.isHolidayType(rawType)) type = HOLIDAY_TYPE;
                     if (type && !this.exerciseTypes.includes(type)) this.exerciseTypes.push(type);
                     return {
                         id: Date.now() + Math.random(),
                         date: v[headers.indexOf('date')],
                         exercise_type: type,
-                        duration_minutes: type === SICK_TYPE ? 0 : parseInt(v[headers.indexOf('duration_minutes')]),
+                        duration_minutes: OFF_TYPES.includes(type) ? 0 : parseInt(v[headers.indexOf('duration_minutes')]),
                         notes: (v[headers.indexOf('notes')] || '').replace(/^"|"$/g, '')
                     };
                 }).filter(ex => ex.date);
-                if (!this.exerciseTypes.includes(SICK_TYPE)) this.exerciseTypes.push(SICK_TYPE);
+                OFF_TYPES.forEach(t => { if (!this.exerciseTypes.includes(t)) this.exerciseTypes.push(t); });
                 this.startFresh();
             }
 
