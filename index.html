@@ -378,6 +378,79 @@
             return bytes;
         }
 
+        function concatBytes(parts) {
+            const total = parts.reduce((n, p) => n + p.length, 0);
+            const out = new Uint8Array(total);
+            let offset = 0;
+            for (const part of parts) {
+                out.set(part, offset);
+                offset += part.length;
+            }
+            return out;
+        }
+
+        function u16le(n) {
+            const b = new Uint8Array(2);
+            b[0] = n & 0xff;
+            b[1] = (n >>> 8) & 0xff;
+            return b;
+        }
+
+        function u32le(n) {
+            const b = new Uint8Array(4);
+            b[0] = n & 0xff;
+            b[1] = (n >>> 8) & 0xff;
+            b[2] = (n >>> 16) & 0xff;
+            b[3] = (n >>> 24) & 0xff;
+            return b;
+        }
+
+        function crc32(bytes) {
+            let c = 0xffffffff;
+            for (const value of bytes) {
+                c ^= value;
+                for (let i = 0; i < 8; i++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
+            }
+            return (c ^ 0xffffffff) >>> 0;
+        }
+
+        function toZipBytes(data) {
+            if (data instanceof Uint8Array) return data;
+            return new TextEncoder().encode(String(data));
+        }
+
+        function buildStoreZip(files) {
+            const encoder = new TextEncoder();
+            const locals = [];
+            const centrals = [];
+            let offset = 0;
+            for (const file of files) {
+                const name = encoder.encode(file.name);
+                const data = toZipBytes(file.data);
+                const crc = crc32(data);
+                const local = concatBytes([
+                    u32le(0x04034b50), u16le(20), u16le(0), u16le(0), u16le(0), u16le(0),
+                    u32le(crc), u32le(data.length), u32le(data.length), u16le(name.length), u16le(0),
+                    name, data
+                ]);
+                locals.push(local);
+                centrals.push(concatBytes([
+                    u32le(0x02014b50), u16le(20), u16le(20), u16le(0), u16le(0), u16le(0), u16le(0),
+                    u32le(crc), u32le(data.length), u32le(data.length), u16le(name.length),
+                    u16le(0), u16le(0), u16le(0), u16le(0), u32le(0), u32le(offset), name
+                ]));
+                offset += local.length;
+            }
+            const localPart = concatBytes(locals);
+            const centralPart = concatBytes(centrals);
+            return concatBytes([
+                localPart,
+                centralPart,
+                u32le(0x06054b50), u16le(0), u16le(0), u16le(files.length), u16le(files.length),
+                u32le(centralPart.length), u32le(localPart.length), u16le(0)
+            ]);
+        }
+
         class SimplePdf {
             constructor() {
                 this.W = 595.28;
@@ -1129,9 +1202,17 @@
 
             async saveReport() {
                 const stamp = new Date().toISOString().split('T')[0];
-                const names = { csv: `workout_history_${stamp}.csv`, pdf: `workout_history_${stamp}.pdf` };
+                const names = {
+                    csv: `workout_history_${stamp}.csv`,
+                    pdf: `workout_history_${stamp}.pdf`,
+                    zip: `workout_history_${stamp}.zip`
+                };
                 const csv = this.buildCSV();
                 const pdf = this.buildPdfReport();
+                const files = [
+                    { name: names.csv, data: csv },
+                    { name: names.pdf, data: pdf }
+                ];
                 if (window.isSecureContext && typeof window.showDirectoryPicker === 'function') {
                     let dir;
                     try {
@@ -1142,18 +1223,16 @@
                         return;
                     }
                     try {
-                        await this.writeFileToDirectory(dir, names.csv, csv);
-                        await this.writeFileToDirectory(dir, names.pdf, pdf);
+                        await this.writeFilesToDirectory(dir, files);
                     } catch (err) {
-                        alert('Could not save the files to the chosen folder. Please try again.');
+                        alert('Could not replace the saved files. Temporary .saving copies may be in that folder. Try Save again.');
                     }
                     return;
                 }
                 this.downloadBoth(names, csv, pdf);
             }
 
-            async writeFileToDirectory(dir, name, data) {
-                const handle = await dir.getFileHandle(name, { create: true });
+            async writeHandle(handle, data) {
                 const writable = await handle.createWritable();
                 try {
                     await writable.write(data);
@@ -1162,11 +1241,36 @@
                 }
             }
 
+            async writeFilesToDirectory(dir, files) {
+                const temps = [];
+                for (const file of files) {
+                    const tempName = `${file.name}.saving`;
+                    const tempHandle = await dir.getFileHandle(tempName, { create: true });
+                    await this.writeHandle(tempHandle, file.data);
+                    temps.push({ file, tempName, tempHandle });
+                }
+                for (const { file, tempName, tempHandle } of temps) {
+                    if (typeof tempHandle.move === 'function') {
+                        try {
+                            await tempHandle.move(file.name);
+                        } catch (err) {
+                            try { await dir.removeEntry(file.name); } catch {}
+                            await tempHandle.move(file.name);
+                        }
+                    } else {
+                        const finalHandle = await dir.getFileHandle(file.name, { create: true });
+                        await this.writeHandle(finalHandle, file.data);
+                        await dir.removeEntry(tempName);
+                    }
+                }
+            }
+
             downloadBoth(names, csv, pdf) {
-                this.triggerDownload(new Blob([csv], { type: 'application/octet-stream' }), names.csv);
-                setTimeout(() => {
-                    this.triggerDownload(new Blob([pdf], { type: 'application/pdf' }), names.pdf);
-                }, 250);
+                const zip = buildStoreZip([
+                    { name: names.csv, data: csv },
+                    { name: names.pdf, data: pdf }
+                ]);
+                this.triggerDownload(new Blob([zip], { type: 'application/zip' }), names.zip || names.csv.replace(/\.csv$/, '.zip'));
             }
 
             triggerDownload(blob, filename) {
@@ -1365,8 +1469,7 @@
             }
 
             drawPdfLog(pdf) {
-                const filtered = this.getFilteredExercises();
-                const sorted = [...filtered].sort((a, b) => new Date(b.date) - new Date(a.date));
+                const sorted = [...this.exercises].sort((a, b) => new Date(b.date) - new Date(a.date));
                 if (sorted.length === 0) {
                     pdf.drawText('No exercises found', pdf.margin, 10, { color: '#78716c' });
                     pdf.y += 14;
@@ -1400,6 +1503,7 @@
         }
 
         const tracker = new ExerciseTracker();
+        window.tracker = tracker;
         
         if (tracker.exercises.length > 0) {
             tracker.startFresh();

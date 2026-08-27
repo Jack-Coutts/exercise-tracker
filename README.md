@@ -31,7 +31,9 @@ Because the app doesn't "remember" you (for privacy), you follow this simple 3-s
    - a CSV of your workout history (your database for next time)
    - a PDF report of your current summary, heatmap, and log
 
-   In browsers without a folder picker, both files still download to your device. You can delete the old CSV once you have the new one.
+   If Save fails, look for leftover `.saving` files in that folder and tap Save again. The live CSV is not replaced until both new files are ready.
+
+   In browsers without a folder picker, Save downloads one `workout_history_YYYY-MM-DD.zip` that contains both files. Unzip it and import the CSV next time. You can delete the old CSV once you have the new one.
 
 > ⚠️ **If you close the page without clicking Save, your new entries will not be saved.**
 
@@ -83,7 +85,7 @@ View your exercise breakdown:
 
 ## 💡 Pro Tips
 * **No Internet Needed:** Once you open the page, you can use it at the gym without a signal. Just remember to save the files before you close the tab! 
-* **Reports:** Use **Save** to write a PDF report alongside your CSV—handy for a trainer or a printed log. On Chromium browsers you pick one folder and both files land there; other browsers download both files instead. (Your browser's own print dialog still works if you want a paper copy.)
+* **Reports:** Use **Save** to write a PDF report alongside your CSV. On Chromium browsers you pick one folder and both files land there. Other browsers download one zip with both files. The PDF uses standard Latin fonts, so the browser print dialog is the better path for notes outside Latin-1.
 * **Editing:** If you make a mistake, you can always open your CSV file in Excel, fix the numbers, save it, and upload it back to the app. 
 * **Backup:** Keep a copy of your CSV file in cloud storage (iCloud, Google Drive, Dropbox) so you never lose your history.
 
