@@ -414,11 +414,6 @@
             return (c ^ 0xffffffff) >>> 0;
         }
 
-        function toZipBytes(data) {
-            if (data instanceof Uint8Array) return data;
-            return new TextEncoder().encode(String(data));
-        }
-
         function buildStoreZip(files) {
             const encoder = new TextEncoder();
             const locals = [];
@@ -426,7 +421,7 @@
             let offset = 0;
             for (const file of files) {
                 const name = encoder.encode(file.name);
-                const data = toZipBytes(file.data);
+                const data = file.data instanceof Uint8Array ? file.data : encoder.encode(String(file.data));
                 const crc = crc32(data);
                 const local = concatBytes([
                     u32le(0x04034b50), u16le(20), u16le(0), u16le(0), u16le(0), u16le(0),
@@ -1224,7 +1219,7 @@
                     }
                     try {
                         await this.writeFilesToDirectory(dir, files);
-                    } catch (err) {
+                    } catch {
                         alert('Could not replace the saved files. Temporary .saving copies may be in that folder. Try Save again.');
                     }
                     return;
@@ -1253,7 +1248,7 @@
                     if (typeof tempHandle.move === 'function') {
                         try {
                             await tempHandle.move(file.name);
-                        } catch (err) {
+                        } catch {
                             try { await dir.removeEntry(file.name); } catch {}
                             await tempHandle.move(file.name);
                         }
@@ -1270,7 +1265,7 @@
                     { name: names.csv, data: csv },
                     { name: names.pdf, data: pdf }
                 ]);
-                this.triggerDownload(new Blob([zip], { type: 'application/zip' }), names.zip || names.csv.replace(/\.csv$/, '.zip'));
+                this.triggerDownload(new Blob([zip], { type: 'application/zip' }), names.zip);
             }
 
             triggerDownload(blob, filename) {

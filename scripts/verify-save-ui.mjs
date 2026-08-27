@@ -81,17 +81,6 @@ try {
     });
     await cdp(ws, 21, 'Page.navigate', { url: URL });
     await loaded;
-    const pageState = await evalExpr(22, `
-        JSON.stringify({
-            href: location.href,
-            title: document.title,
-            hasSave: !!document.getElementById('saveButton'),
-            hasTracker: typeof window.tracker,
-            ready: document.readyState,
-            scriptCount: document.scripts.length
-        })
-    `);
-    console.log('pageState', pageState);
 
     await evalExpr(3, `
         document.querySelector('button.secondary')?.click();
