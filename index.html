@@ -315,12 +315,22 @@
         }
 
         function toPdfLatin1(str) {
-            const map = { '\u2018': "'", '\u2019': "'", '\u201C': '"', '\u201D': '"', '\u2013': '-', '\u2014': '-', '\u2026': '...', '\u00A0': ' ' };
+            const map = {
+                '\u2018': "'",
+                '\u2019': "'",
+                '\u201C': '"',
+                '\u201D': '"',
+                '\u2013': '\x96',
+                '\u2014': '\x97',
+                '\u2026': '...',
+                '\u00A0': ' '
+            };
             let out = '';
             for (const ch of String(str ?? '')) {
-                if (map[ch]) out += map[ch];
+                if (Object.prototype.hasOwnProperty.call(map, ch)) out += map[ch];
                 else if (ch === '\n' || ch === '\r' || ch === '\t') out += ' ';
                 else if (ch.charCodeAt(0) >= 32 && ch.charCodeAt(0) <= 126) out += ch;
+                else if (ch.charCodeAt(0) >= 160 && ch.charCodeAt(0) <= 255) out += ch;
                 else out += '?';
             }
             return out;
@@ -471,9 +481,9 @@
                 const objects = [];
                 objects[catalogId] = `<< /Type /Catalog /Pages ${pagesId} 0 R >>`;
                 objects[pagesId] = `<< /Type /Pages /Kids [${pageIds.map(id => id + ' 0 R').join(' ')}] /Count ${nPages} >>`;
-                objects[font1] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
-                objects[font2] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>';
-                objects[font3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique >>';
+                objects[font1] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
+                objects[font2] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
+                objects[font3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique /Encoding /WinAnsiEncoding >>';
                 for (let i = 0; i < nPages; i++) {
                     objects[pageIds[i]] = `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${this.W.toFixed(2)} ${this.H.toFixed(2)}] /Resources << /Font << /F1 ${font1} 0 R /F2 ${font2} 0 R /F3 ${font3} 0 R >> >> /Contents ${contentIds[i]} 0 R >>`;
                     const stream = this.pages[i] + '\n';
@@ -1258,7 +1268,7 @@
                 pdf.rule();
                 this.drawPdfHeatmaps(pdf);
 
-                pdf.ensure(28);
+                pdf.ensure(110);
                 pdf.y += 8;
                 pdf.rule();
                 pdf.drawText('Exercise Log', pdf.margin, 12, { bold: true });
@@ -1403,7 +1413,11 @@
                     return;
                 }
                 sorted.forEach(ex => {
-                    pdf.ensure(42);
+                    const notesLines = ex.notes ? wrapPdfText(ex.notes, 8, pdf.width) : [];
+                    const durationH = this.isOffType(ex.exercise_type) ? 0 : 12;
+                    const blockH = 12 + 14 + durationH + notesLines.length * 11 + 12;
+                    const pageBody = pdf.H - pdf.margin * 2;
+                    pdf.ensure(blockH <= pageBody ? blockH : 42);
                     pdf.drawText(this.formatDate(ex.date), pdf.margin, 8, { color: '#78716c' });
                     pdf.y += 12;
                     pdf.drawText(ex.exercise_type, pdf.margin, 10, { bold: true });
@@ -1412,13 +1426,11 @@
                         pdf.drawText(`${ex.duration_minutes} minutes`, pdf.margin, 9, { color: '#475569' });
                         pdf.y += 12;
                     }
-                    if (ex.notes) {
-                        wrapPdfText(ex.notes, 8, pdf.width).forEach(line => {
-                            pdf.ensure(12);
-                            pdf.drawText(line, pdf.margin, 8, { italic: true, color: '#78716c' });
-                            pdf.y += 11;
-                        });
-                    }
+                    notesLines.forEach(line => {
+                        pdf.ensure(12);
+                        pdf.drawText(line, pdf.margin, 8, { italic: true, color: '#78716c' });
+                        pdf.y += 11;
+                    });
                     pdf.y += 4;
                     pdf.ops.push(`${hexToPdfColour('#dddddd')} RG 0.4 w`);
                     pdf.ops.push(`${pdf.margin.toFixed(2)} ${pdf.pdfY(pdf.y, 0).toFixed(2)} m ${(pdf.W - pdf.margin).toFixed(2)} ${pdf.pdfY(pdf.y, 0).toFixed(2)} l S`);
