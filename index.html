@@ -281,8 +281,7 @@
                 <div id="summaryContent"></div>
                 <div id="multiHeatmapContainer" class="heatmap-section"></div>
                 <div class="action-buttons">
-                    <button class="secondary" onclick="window.print()">Print PDF</button>
-                    <button class="secondary" onclick="tracker.exportToCSV()">Export CSV</button>
+                    <button type="button" id="saveButton" onclick="tracker.saveReport()" title="Save a CSV and a PDF of your current report">Save</button>
                     <button class="danger" onclick="if(confirm('Clear all data?')) { location.reload(); }">Clear All</button>
                 </div>
             </div>
@@ -306,6 +305,197 @@
         const SICK_TYPE = 'off sick';
         const HOLIDAY_TYPE = 'on holiday';
         const OFF_TYPES = [SICK_TYPE, HOLIDAY_TYPE];
+
+        const HELVETICA_WIDTHS = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
+        const HEATMAP_FILL = { 0: '#ffffff', 1: '#c0c0c0', 2: '#909090', 3: '#606060', 4: '#000000', sick: '#dc2626', holiday: '#2563eb' };
+
+        function hexToPdfColour(hex) {
+            const n = parseInt(String(hex).replace('#', ''), 16);
+            return `${(((n >> 16) & 255) / 255).toFixed(3)} ${(((n >> 8) & 255) / 255).toFixed(3)} ${((n & 255) / 255).toFixed(3)}`;
+        }
+
+        function toPdfLatin1(str) {
+            const map = { '\u2018': "'", '\u2019': "'", '\u201C': '"', '\u201D': '"', '\u2013': '-', '\u2014': '-', '\u2026': '...', '\u00A0': ' ' };
+            let out = '';
+            for (const ch of String(str ?? '')) {
+                if (map[ch]) out += map[ch];
+                else if (ch === '\n' || ch === '\r' || ch === '\t') out += ' ';
+                else if (ch.charCodeAt(0) >= 32 && ch.charCodeAt(0) <= 126) out += ch;
+                else out += '?';
+            }
+            return out;
+        }
+
+        function pdfEscape(str) {
+            return str.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+        }
+
+        function helveticaWidth(str, size) {
+            let w = 0;
+            for (const ch of str) {
+                const c = ch.charCodeAt(0);
+                w += (c >= 32 && c <= 126) ? HELVETICA_WIDTHS[c - 32] : 556;
+            }
+            return w * size / 1000;
+        }
+
+        function wrapPdfText(str, size, maxWidth) {
+            const text = toPdfLatin1(str).trim();
+            if (!text) return [''];
+            const words = text.split(/\s+/);
+            const lines = [];
+            let line = '';
+            for (const word of words) {
+                const trial = line ? `${line} ${word}` : word;
+                if (helveticaWidth(trial, size) <= maxWidth) {
+                    line = trial;
+                } else {
+                    if (line) lines.push(line);
+                    if (helveticaWidth(word, size) <= maxWidth) {
+                        line = word;
+                    } else {
+                        let chunk = '';
+                        for (const ch of word) {
+                            const next = chunk + ch;
+                            if (helveticaWidth(next, size) <= maxWidth) chunk = next;
+                            else {
+                                if (chunk) lines.push(chunk);
+                                chunk = ch;
+                            }
+                        }
+                        line = chunk;
+                    }
+                }
+            }
+            if (line) lines.push(line);
+            return lines.length ? lines : [''];
+        }
+
+        function latin1ToBytes(str) {
+            const bytes = new Uint8Array(str.length);
+            for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xff;
+            return bytes;
+        }
+
+        class SimplePdf {
+            constructor() {
+                this.W = 595.28;
+                this.H = 841.89;
+                this.margin = 42;
+                this.pages = [];
+                this.ops = [];
+                this.y = this.margin;
+            }
+
+            get width() {
+                return this.W - this.margin * 2;
+            }
+
+            finishPage() {
+                this.pages.push(this.ops.join('\n'));
+                this.ops = [];
+                this.y = this.margin;
+            }
+
+            ensure(h) {
+                if (this.y + h > this.H - this.margin && this.ops.length) this.finishPage();
+            }
+
+            gap(h) {
+                this.y += h;
+            }
+
+            pdfY(top, height = 0) {
+                return this.H - top - height;
+            }
+
+            drawText(str, x, size, opts = {}) {
+                const t = toPdfLatin1(str);
+                if (!t) return;
+                const color = hexToPdfColour(opts.color || '#1c1917');
+                const font = opts.italic ? '/F3' : (opts.bold ? '/F2' : '/F1');
+                const baseline = this.pdfY(this.y, size * 0.8);
+                this.ops.push(`BT ${color} rg ${font} ${size} Tf 1 0 0 1 ${x.toFixed(2)} ${baseline.toFixed(2)} Tm (${pdfEscape(t)}) Tj ET`);
+            }
+
+            drawWrapped(str, x, size, maxWidth, opts = {}) {
+                const lines = wrapPdfText(str, size, maxWidth);
+                const lineH = opts.lineHeight || size * 1.35;
+                this.ensure(lineH * lines.length);
+                for (const line of lines) {
+                    this.drawText(line, x, size, opts);
+                    this.y += lineH;
+                }
+            }
+
+            fillRect(x, top, w, h, fill) {
+                this.ops.push(`${hexToPdfColour(fill)} rg`);
+                this.ops.push(`${x.toFixed(2)} ${this.pdfY(top, h).toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f`);
+            }
+
+            strokeRect(x, top, w, h, stroke, lineWidth = 0.4) {
+                this.ops.push(`${hexToPdfColour(stroke)} RG ${lineWidth} w`);
+                this.ops.push(`${x.toFixed(2)} ${this.pdfY(top, h).toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re S`);
+            }
+
+            fillStrokeRect(x, top, w, h, fill, stroke, lineWidth = 0.3) {
+                this.ops.push(`${hexToPdfColour(fill)} rg ${hexToPdfColour(stroke)} RG ${lineWidth} w`);
+                this.ops.push(`${x.toFixed(2)} ${this.pdfY(top, h).toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re B`);
+            }
+
+            rule() {
+                this.ensure(10);
+                this.ops.push(`${hexToPdfColour('#333333')} RG 1 w`);
+                this.ops.push(`${this.margin.toFixed(2)} ${this.pdfY(this.y, 0).toFixed(2)} m ${(this.W - this.margin).toFixed(2)} ${this.pdfY(this.y, 0).toFixed(2)} l S`);
+                this.y += 10;
+            }
+
+            toUint8Array() {
+                if (this.ops.length) this.finishPage();
+                if (!this.pages.length) this.finishPage();
+
+                const nPages = this.pages.length;
+                const catalogId = 1;
+                const pagesId = 2;
+                const font1 = 3;
+                const font2 = 4;
+                const font3 = 5;
+                const firstPageId = 6;
+                const pageIds = [];
+                const contentIds = [];
+                for (let i = 0; i < nPages; i++) {
+                    pageIds.push(firstPageId + i * 2);
+                    contentIds.push(firstPageId + i * 2 + 1);
+                }
+
+                const objects = [];
+                objects[catalogId] = `<< /Type /Catalog /Pages ${pagesId} 0 R >>`;
+                objects[pagesId] = `<< /Type /Pages /Kids [${pageIds.map(id => id + ' 0 R').join(' ')}] /Count ${nPages} >>`;
+                objects[font1] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+                objects[font2] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>';
+                objects[font3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique >>';
+                for (let i = 0; i < nPages; i++) {
+                    objects[pageIds[i]] = `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${this.W.toFixed(2)} ${this.H.toFixed(2)}] /Resources << /Font << /F1 ${font1} 0 R /F2 ${font2} 0 R /F3 ${font3} 0 R >> >> /Contents ${contentIds[i]} 0 R >>`;
+                    const stream = this.pages[i] + '\n';
+                    objects[contentIds[i]] = `<< /Length ${stream.length} >>\nstream\n${stream}endstream`;
+                }
+
+                let pdf = '%PDF-1.4\n';
+                const offsets = [0];
+                for (let i = 1; i < objects.length; i++) {
+                    offsets[i] = pdf.length;
+                    pdf += `${i} 0 obj\n${objects[i]}\nendobj\n`;
+                }
+                const xrefPos = pdf.length;
+                pdf += `xref\n0 ${objects.length}\n`;
+                pdf += '0000000000 65535 f \n';
+                for (let i = 1; i < objects.length; i++) {
+                    pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+                }
+                pdf += `trailer\n<< /Size ${objects.length} /Root ${catalogId} 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`;
+                return latin1ToBytes(pdf);
+            }
+        }
 
         class ExerciseTracker {
             constructor() {
@@ -816,7 +1006,7 @@
                 });
             }
 
-            generateYearGrid(year) {
+            getHeatmapWeeks(year) {
                 const daily = {};
                 const sickDays = new Set();
                 const holidayDays = new Set();
@@ -830,7 +1020,6 @@
                     }
                 });
 
-                const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
                 const weeks = [];
                 const firstDay = new Date(year, 0, 1).getDay();
                 const startOffset = firstDay === 0 ? 6 : firstDay - 1;
@@ -858,6 +1047,12 @@
                     }
                     weeks.push(weekData);
                 }
+                return weeks;
+            }
+
+            generateYearGrid(year) {
+                const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+                const weeks = this.getHeatmapWeeks(year);
 
                 let html = '';
                 for (let d = 0; d < 7; d++) {
@@ -935,18 +1130,300 @@
                 r.push(c); return r;
             }
 
-            exportToCSV() {
+            buildCSV() {
                 const h = 'date,exercise_type,duration_minutes,notes';
                 const r = this.exercises.map(ex => `${ex.date},${ex.exercise_type},${ex.duration_minutes},"${(ex.notes || '').replace(/"/g, '""')}"`);
-                const csvContent = [h, ...r].join('\n');
-                const blob = new Blob([csvContent], { type: 'application/octet-stream' });
+                return [h, ...r].join('\n');
+            }
+
+            saveFileNames() {
+                const stamp = new Date().toISOString().split('T')[0];
+                return {
+                    csv: `workout_history_${stamp}.csv`,
+                    pdf: `workout_history_${stamp}.pdf`
+                };
+            }
+
+            formatMins(mins) {
+                return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+            }
+
+            canPickDirectory() {
+                return window.isSecureContext && typeof window.showDirectoryPicker === 'function';
+            }
+
+            async saveReport() {
+                const names = this.saveFileNames();
+                const csv = this.buildCSV();
+                const pdf = this.buildPdfReport();
+                if (this.canPickDirectory()) {
+                    let dir;
+                    try {
+                        dir = await window.showDirectoryPicker({
+                            id: 'exercise-tracker-save',
+                            mode: 'readwrite'
+                        });
+                    } catch (err) {
+                        if (err && err.name === 'AbortError') return;
+                        this.downloadBoth(names, csv, pdf);
+                        return;
+                    }
+                    try {
+                        await this.writeFileToDirectory(dir, names.csv, csv);
+                        await this.writeFileToDirectory(dir, names.pdf, pdf);
+                    } catch (err) {
+                        alert('Could not save the files to the chosen folder. Please try again.');
+                    }
+                    return;
+                }
+                this.downloadBoth(names, csv, pdf);
+            }
+
+            async writeFileToDirectory(dir, name, data) {
+                const handle = await dir.getFileHandle(name, { create: true });
+                const writable = await handle.createWritable();
+                try {
+                    await writable.write(data);
+                } finally {
+                    await writable.close();
+                }
+            }
+
+            downloadBoth(names, csv, pdf) {
+                this.triggerDownload(new Blob([csv], { type: 'application/octet-stream' }), names.csv);
+                window.setTimeout(() => {
+                    this.triggerDownload(new Blob([pdf], { type: 'application/pdf' }), names.pdf);
+                }, 250);
+            }
+
+            triggerDownload(blob, filename) {
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `workout_history_${new Date().toISOString().split('T')[0]}.csv`;
+                a.download = filename;
                 document.body.appendChild(a);
                 a.click();
-                setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+                setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+            }
+
+            buildPdfReport() {
+                const pdf = new SimplePdf();
+                const statsExercises = this.getStatsExercises();
+                const totalMins = statsExercises.reduce((sum, ex) => sum + ex.duration_minutes, 0);
+                const totalSessions = statsExercises.length;
+                let printDateRange = '';
+                let startDateText = '';
+                if (statsExercises.length > 0) {
+                    const sortedAsc = [...statsExercises].sort((a, b) => new Date(a.date) - new Date(b.date));
+                    const firstDate = this.formatDate(sortedAsc[0].date);
+                    const lastDate = this.formatDate(sortedAsc[sortedAsc.length - 1].date);
+                    startDateText = ` (since ${firstDate})`;
+                    printDateRange = `${firstDate} — ${lastDate} (${totalSessions} sessions)`;
+                }
+                const generated = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+                pdf.drawText('Exercise Tracker', pdf.margin, 18, { bold: true });
+                pdf.y += 24;
+                if (printDateRange) {
+                    pdf.drawText(printDateRange, pdf.margin, 10, { color: '#666666' });
+                    pdf.y += 14;
+                }
+                pdf.drawText(`Generated ${generated}`, pdf.margin, 9, { color: '#666666' });
+                pdf.y += 16;
+                pdf.rule();
+
+                const weeklyAvg = this.calculateWeeklyAverage();
+                const stats = [
+                    { value: String(totalSessions), label: 'Total Sessions' },
+                    { value: `${Math.round(totalMins / 60)}h ${totalMins % 60}m`, label: 'Total Time' },
+                    { value: String(this.calculateStreak()), label: 'Current Streak' },
+                    { value: String(this.calculateLongestStreak()), label: 'Longest Streak' },
+                    { value: String(this.calculateLongestBreak()), label: 'Longest Break (days)' },
+                    { value: this.calculateMostFrequentType(), label: 'Top Exercise' },
+                    { value: String(this.calculateTotalActiveDays()), label: 'Active Days' },
+                    { value: String(this.calculateAvgDurationPerSession()), label: 'Avg min/session' },
+                    { value: String(this.calculateAvgSessionsPerWeek()), label: 'Avg sessions/week' },
+                    { value: `${Math.floor(weeklyAvg / 60)}h ${weeklyAvg % 60}m`, label: 'Avg time/week' }
+                ];
+                this.drawPdfStats(pdf, stats);
+
+                const group = this.calculateGroupStats(statsExercises);
+                pdf.ensure(28);
+                pdf.drawText(`All Time${startDateText}`, pdf.margin, 11, { bold: true });
+                pdf.y += 16;
+                this.drawPdfSummary(pdf, group, this.calculateSickDays(), this.calculateHolidayDays());
+
+                pdf.ensure(24);
+                pdf.y += 6;
+                pdf.rule();
+                this.drawPdfHeatmaps(pdf);
+
+                pdf.ensure(28);
+                pdf.y += 8;
+                pdf.rule();
+                pdf.drawText('Exercise Log', pdf.margin, 12, { bold: true });
+                pdf.y += 18;
+                this.drawPdfLog(pdf);
+
+                return pdf.toUint8Array();
+            }
+
+            drawPdfStats(pdf, stats) {
+                const cols = 5;
+                const gap = 6;
+                const boxH = 38;
+                const boxW = (pdf.width - gap * (cols - 1)) / cols;
+                const rows = Math.ceil(stats.length / cols);
+                pdf.ensure(rows * (boxH + gap) + 4);
+                const originY = pdf.y;
+                stats.forEach((stat, i) => {
+                    const r = Math.floor(i / cols);
+                    const c = i % cols;
+                    const x = pdf.margin + c * (boxW + gap);
+                    const top = originY + r * (boxH + gap);
+                    pdf.fillRect(x, top, boxW, boxH, '#fafaf9');
+                    pdf.strokeRect(x, top, boxW, boxH, '#e7e5e4', 0.4);
+                    const savedY = pdf.y;
+                    pdf.y = top + 6;
+                    const value = toPdfLatin1(stat.value);
+                    const valueSize = helveticaWidth(value, 11) > boxW - 8 ? 8 : 11;
+                    pdf.drawText(value, x + (boxW - helveticaWidth(value, valueSize)) / 2, valueSize, { bold: true });
+                    pdf.y = top + 22;
+                    const label = toPdfLatin1(stat.label);
+                    const labelSize = helveticaWidth(label, 7) > boxW - 6 ? 6 : 7;
+                    pdf.drawText(label, x + (boxW - helveticaWidth(label, labelSize)) / 2, labelSize, { color: '#666666' });
+                    pdf.y = savedY;
+                });
+                pdf.y = originY + rows * (boxH + gap) + 8;
+            }
+
+            drawPdfSummary(pdf, data, sickDays, holidayDays) {
+                const row = (type, detail, bold = false) => {
+                    pdf.ensure(16);
+                    pdf.drawText(type, pdf.margin, 9, { bold });
+                    const detailWidth = helveticaWidth(toPdfLatin1(detail), 8);
+                    pdf.drawText(detail, pdf.W - pdf.margin - detailWidth, 8, { color: '#666666' });
+                    pdf.y += 14;
+                    pdf.ops.push(`${hexToPdfColour('#eeeeee')} RG 0.3 w`);
+                    pdf.ops.push(`${pdf.margin.toFixed(2)} ${pdf.pdfY(pdf.y, 0).toFixed(2)} m ${(pdf.W - pdf.margin).toFixed(2)} ${pdf.pdfY(pdf.y, 0).toFixed(2)} l S`);
+                    pdf.y += 4;
+                };
+
+                if (data.typeCount > 0) {
+                    row('Total', `${data.totalSessions} sessions · ${this.formatMins(data.totalMins)}`, true);
+                }
+                const sortedTypes = Object.entries(data.breakdown).sort((a, b) => b[1].min - a[1].min);
+                if (sortedTypes.length === 0) {
+                    pdf.drawText('No exercises', pdf.margin, 9, { color: '#666666' });
+                    pdf.y += 14;
+                } else {
+                    sortedTypes.forEach(([type, d]) => {
+                        const percentMins = data.totalMins > 0 ? Math.round((d.min / data.totalMins) * 100) : 0;
+                        const percentSessions = data.totalSessions > 0 ? Math.round((d.count / data.totalSessions) * 100) : 0;
+                        row(type, `${d.count} sessions (${percentSessions}%) · ${this.formatMins(d.min)} (${percentMins}%)`);
+                    });
+                }
+                if (sickDays > 0) row(SICK_TYPE, `${sickDays} day${sickDays === 1 ? '' : 's'} (excluded from stats)`);
+                if (holidayDays > 0) row(HOLIDAY_TYPE, `${holidayDays} day${holidayDays === 1 ? '' : 's'} (excluded from stats)`);
+            }
+
+            drawPdfHeatmaps(pdf) {
+                const years = [...new Set(this.exercises.map(ex => new Date(ex.date).getFullYear()))].sort((a, b) => b - a);
+                if (years.length === 0) years.push(new Date().getFullYear());
+                const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+                years.forEach(year => {
+                    const cell = 7;
+                    const gap = 1.2;
+                    const labelW = 14;
+                    const gridH = 7 * (cell + gap);
+                    const blockH = 18 + gridH + 22;
+                    pdf.ensure(blockH);
+                    pdf.drawText(String(year), pdf.margin, 11, { bold: true });
+                    pdf.y += 16;
+                    const weeks = this.getHeatmapWeeks(year);
+                    const gridTop = pdf.y;
+                    const gridX = pdf.margin + labelW;
+                    for (let d = 0; d < 7; d++) {
+                        const rowTop = gridTop + d * (cell + gap);
+                        const savedY = pdf.y;
+                        pdf.y = rowTop;
+                        pdf.drawText(dayLabels[d], pdf.margin, 6, { color: '#78716c' });
+                        pdf.y = savedY;
+                        for (let w = 0; w < 53; w++) {
+                            const item = weeks[w][d];
+                            if (!item.valid) continue;
+                            const x = gridX + w * (cell + gap);
+                            let fill = HEATMAP_FILL[0];
+                            if (item.sick) fill = HEATMAP_FILL.sick;
+                            else if (item.holiday) fill = HEATMAP_FILL.holiday;
+                            else fill = HEATMAP_FILL[item.lvl];
+                            pdf.fillStrokeRect(x, rowTop, cell, cell, fill, '#d4d4d4');
+                        }
+                    }
+                    pdf.y = gridTop + gridH + 8;
+                    this.drawPdfHeatmapLegend(pdf, cell);
+                    pdf.y += 10;
+                });
+            }
+
+            drawPdfHeatmapLegend(pdf, cell) {
+                const items = [
+                    { fill: HEATMAP_FILL[1], label: '45' },
+                    { fill: HEATMAP_FILL[2], label: '90' },
+                    { fill: HEATMAP_FILL[3], label: '135' },
+                    { fill: HEATMAP_FILL[4], label: '136+' },
+                    { fill: HEATMAP_FILL.sick, label: 'sick' },
+                    { fill: HEATMAP_FILL.holiday, label: 'holiday' }
+                ];
+                let x = pdf.W - pdf.margin;
+                const note = '7 days × 52 weeks';
+                x -= helveticaWidth(note, 7) + 10;
+                const savedY = pdf.y;
+                pdf.y += 1;
+                pdf.drawText(note, x + 10, 7, { color: '#78716c' });
+                pdf.y = savedY;
+                for (let i = items.length - 1; i >= 0; i--) {
+                    const labelW = helveticaWidth(items[i].label, 7);
+                    x -= labelW + 4;
+                    pdf.y = savedY;
+                    pdf.drawText(items[i].label, x, 7, { color: '#78716c' });
+                    x -= cell + 3;
+                    pdf.fillStrokeRect(x, savedY, cell, cell, items[i].fill, '#d4d4d4');
+                    x -= 6;
+                }
+                pdf.y = savedY + cell;
+            }
+
+            drawPdfLog(pdf) {
+                const filtered = this.getFilteredExercises();
+                const sorted = [...filtered].sort((a, b) => new Date(b.date) - new Date(a.date));
+                if (sorted.length === 0) {
+                    pdf.drawText('No exercises found', pdf.margin, 10, { color: '#78716c' });
+                    pdf.y += 14;
+                    return;
+                }
+                sorted.forEach(ex => {
+                    pdf.ensure(42);
+                    pdf.drawText(this.formatDate(ex.date), pdf.margin, 8, { color: '#78716c' });
+                    pdf.y += 12;
+                    pdf.drawText(ex.exercise_type, pdf.margin, 10, { bold: true });
+                    pdf.y += 13;
+                    if (!this.isOffType(ex.exercise_type)) {
+                        pdf.drawText(`${ex.duration_minutes} minutes`, pdf.margin, 9, { color: '#475569' });
+                        pdf.y += 12;
+                    }
+                    if (ex.notes) {
+                        wrapPdfText(ex.notes, 8, pdf.width).forEach(line => {
+                            pdf.ensure(12);
+                            pdf.drawText(line, pdf.margin, 8, { italic: true, color: '#78716c' });
+                            pdf.y += 11;
+                        });
+                    }
+                    pdf.y += 4;
+                    pdf.ops.push(`${hexToPdfColour('#dddddd')} RG 0.4 w`);
+                    pdf.ops.push(`${pdf.margin.toFixed(2)} ${pdf.pdfY(pdf.y, 0).toFixed(2)} m ${(pdf.W - pdf.margin).toFixed(2)} ${pdf.pdfY(pdf.y, 0).toFixed(2)} l S`);
+                    pdf.y += 8;
+                });
             }
         }
 

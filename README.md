@@ -27,9 +27,13 @@ Because the app doesn't "remember" you (for privacy), you follow this simple 3-s
 
 1. **OPEN & UPLOAD:** Open the [Tracker Link](https://jack-coutts.github.io/exercise-tracker/) and tap the "Import" box.  Select your `exercises.csv` file. Your history and maps will instantly appear. 
 2. **LOG:** Add your new workout for today (type, minutes, and any notes).
-3. **SAVE & DOWNLOAD:** This is the most important step!  Tap **"Export CSV"**. This saves a *new* version of your file to your device.  You can delete the old one. 
+3. **SAVE:** This is the most important step! Tap **Save**. Choose one folder (Chrome, Edge, and other Chromium browsers will offer a folder picker) and the app writes both files there:
+   - a CSV of your workout history (your database for next time)
+   - a PDF report of your current summary, heatmap, and log
 
-> ⚠️ **If you close the page without clicking "Export," your new entries will not be saved.**
+   In browsers without a folder picker, both files still download to your device. You can delete the old CSV once you have the new one.
+
+> ⚠️ **If you close the page without clicking Save, your new entries will not be saved.**
 
 ---
 
@@ -49,7 +53,7 @@ You can make this feel like a real app by adding it to your home screen:
 ## 🎨 Features
 
 ### Custom Exercise Types
-The app comes with default exercise types (cycling, gym, squash, running, pilates, swimming), but you can **add your own** in the "Exercise Types" section.  Custom types are saved when you export your CSV.
+The app comes with default exercise types (cycling, gym, squash, running, pilates, swimming), but you can **add your own** in the "Exercise Types" section.  Custom types are saved when you save your CSV.
 
 ### Heatmap Intensity Levels
 The consistency heatmaps show your daily activity with varying intensity: 
@@ -78,8 +82,8 @@ View your exercise breakdown:
 ---
 
 ## 💡 Pro Tips
-* **No Internet Needed:** Once you open the page, you can use it at the gym without a signal. Just remember to download the file before you close the tab! 
-* **Printing:** Use the **Print PDF** button to create a clean report of your month or year—perfect for showing a trainer or keeping a physical log.
+* **No Internet Needed:** Once you open the page, you can use it at the gym without a signal. Just remember to save the files before you close the tab! 
+* **Reports:** Use **Save** to write a PDF report alongside your CSV—handy for a trainer or a printed log. On Chromium browsers you pick one folder and both files land there; other browsers download both files instead. (Your browser's own print dialog still works if you want a paper copy.)
 * **Editing:** If you make a mistake, you can always open your CSV file in Excel, fix the numbers, save it, and upload it back to the app. 
 * **Backup:** Keep a copy of your CSV file in cloud storage (iCloud, Google Drive, Dropbox) so you never lose your history.
 
@@ -92,8 +96,8 @@ View your exercise breakdown:
 - Dates must be in `YYYY-MM-DD` format (e.g., `2025-01-15`)
 - Duration must be a whole number (no decimals)
 
-### I accidentally closed without exporting
-Unfortunately, any unsaved entries are lost. This is the trade-off for privacy—no cloud means no automatic backup.  Consider setting a reminder to export after each session.
+### I accidentally closed without saving
+Unfortunately, any unsaved entries are lost. This is the trade-off for privacy—no cloud means no automatic backup.  Consider setting a reminder to save after each session.
 
 ### The heatmap looks wrong
 - Check that your dates are formatted correctly in your CSV
