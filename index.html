@@ -281,7 +281,7 @@
                 <div id="summaryContent"></div>
                 <div id="multiHeatmapContainer" class="heatmap-section"></div>
                 <div class="action-buttons">
-                    <button type="button" id="saveButton" onclick="tracker.saveReport()" title="Save a CSV and a PDF of your current report">Save</button>
+                    <button id="saveButton" onclick="tracker.saveReport()" title="Save a CSV and a PDF of your current report">Save</button>
                     <button class="danger" onclick="if(confirm('Clear all data?')) { location.reload(); }">Clear All</button>
                 </div>
             </div>
@@ -310,24 +310,15 @@
         const HEATMAP_FILL = { 0: '#ffffff', 1: '#c0c0c0', 2: '#909090', 3: '#606060', 4: '#000000', sick: '#dc2626', holiday: '#2563eb' };
 
         function hexToPdfColour(hex) {
-            const n = parseInt(String(hex).replace('#', ''), 16);
+            const n = parseInt(hex.replace('#', ''), 16);
             return `${(((n >> 16) & 255) / 255).toFixed(3)} ${(((n >> 8) & 255) / 255).toFixed(3)} ${((n & 255) / 255).toFixed(3)}`;
         }
 
         function toPdfLatin1(str) {
-            const map = {
-                '\u2018': "'",
-                '\u2019': "'",
-                '\u201C': '"',
-                '\u201D': '"',
-                '\u2013': '\x96',
-                '\u2014': '\x97',
-                '\u2026': '...',
-                '\u00A0': ' '
-            };
+            const map = { '\u2018': "'", '\u2019': "'", '\u201C': '"', '\u201D': '"', '\u2013': '\x96', '\u2014': '\x97', '\u2026': '...', '\u00A0': ' ' };
             let out = '';
-            for (const ch of String(str ?? '')) {
-                if (Object.prototype.hasOwnProperty.call(map, ch)) out += map[ch];
+            for (const ch of String(str || '')) {
+                if (map[ch]) out += map[ch];
                 else if (ch === '\n' || ch === '\r' || ch === '\t') out += ' ';
                 else if (ch.charCodeAt(0) >= 32 && ch.charCodeAt(0) <= 126) out += ch;
                 else if (ch.charCodeAt(0) >= 160 && ch.charCodeAt(0) <= 255) out += ch;
@@ -378,7 +369,7 @@
                 }
             }
             if (line) lines.push(line);
-            return lines.length ? lines : [''];
+            return lines;
         }
 
         function latin1ToBytes(str) {
@@ -411,10 +402,6 @@
                 if (this.y + h > this.H - this.margin && this.ops.length) this.finishPage();
             }
 
-            gap(h) {
-                this.y += h;
-            }
-
             pdfY(top, height = 0) {
                 return this.H - top - height;
             }
@@ -426,16 +413,6 @@
                 const font = opts.italic ? '/F3' : (opts.bold ? '/F2' : '/F1');
                 const baseline = this.pdfY(this.y, size * 0.8);
                 this.ops.push(`BT ${color} rg ${font} ${size} Tf 1 0 0 1 ${x.toFixed(2)} ${baseline.toFixed(2)} Tm (${pdfEscape(t)}) Tj ET`);
-            }
-
-            drawWrapped(str, x, size, maxWidth, opts = {}) {
-                const lines = wrapPdfText(str, size, maxWidth);
-                const lineH = opts.lineHeight || size * 1.35;
-                this.ensure(lineH * lines.length);
-                for (const line of lines) {
-                    this.drawText(line, x, size, opts);
-                    this.y += lineH;
-                }
             }
 
             fillRect(x, top, w, h, fill) {
@@ -1146,35 +1123,21 @@
                 return [h, ...r].join('\n');
             }
 
-            saveFileNames() {
-                const stamp = new Date().toISOString().split('T')[0];
-                return {
-                    csv: `workout_history_${stamp}.csv`,
-                    pdf: `workout_history_${stamp}.pdf`
-                };
-            }
-
             formatMins(mins) {
                 return `${Math.floor(mins / 60)}h ${mins % 60}m`;
             }
 
-            canPickDirectory() {
-                return window.isSecureContext && typeof window.showDirectoryPicker === 'function';
-            }
-
             async saveReport() {
-                const names = this.saveFileNames();
+                const stamp = new Date().toISOString().split('T')[0];
+                const names = { csv: `workout_history_${stamp}.csv`, pdf: `workout_history_${stamp}.pdf` };
                 const csv = this.buildCSV();
                 const pdf = this.buildPdfReport();
-                if (this.canPickDirectory()) {
+                if (window.isSecureContext && typeof window.showDirectoryPicker === 'function') {
                     let dir;
                     try {
-                        dir = await window.showDirectoryPicker({
-                            id: 'exercise-tracker-save',
-                            mode: 'readwrite'
-                        });
+                        dir = await window.showDirectoryPicker({ id: 'exercise-tracker-save', mode: 'readwrite' });
                     } catch (err) {
-                        if (err && err.name === 'AbortError') return;
+                        if (err.name === 'AbortError') return;
                         this.downloadBoth(names, csv, pdf);
                         return;
                     }
@@ -1201,7 +1164,7 @@
 
             downloadBoth(names, csv, pdf) {
                 this.triggerDownload(new Blob([csv], { type: 'application/octet-stream' }), names.csv);
-                window.setTimeout(() => {
+                setTimeout(() => {
                     this.triggerDownload(new Blob([pdf], { type: 'application/pdf' }), names.pdf);
                 }, 250);
             }
@@ -1213,7 +1176,7 @@
                 a.download = filename;
                 document.body.appendChild(a);
                 a.click();
-                setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+                setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
             }
 
             buildPdfReport() {
@@ -1363,10 +1326,7 @@
                             const item = weeks[w][d];
                             if (!item.valid) continue;
                             const x = gridX + w * (cell + gap);
-                            let fill = HEATMAP_FILL[0];
-                            if (item.sick) fill = HEATMAP_FILL.sick;
-                            else if (item.holiday) fill = HEATMAP_FILL.holiday;
-                            else fill = HEATMAP_FILL[item.lvl];
+                            const fill = item.sick ? HEATMAP_FILL.sick : item.holiday ? HEATMAP_FILL.holiday : HEATMAP_FILL[item.lvl];
                             pdf.fillStrokeRect(x, rowTop, cell, cell, fill, '#d4d4d4');
                         }
                     }
