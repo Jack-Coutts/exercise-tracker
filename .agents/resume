@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# This static app has no authentication, database, or state to repair.
+# Amp supervises the preview declared in .amp/services.yaml.
+echo 'Exercise tracker ready; no resume repairs needed.'

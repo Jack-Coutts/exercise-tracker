@@ -1,13 +1,17 @@
 import { spawn } from 'node:child_process';
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, globSync } from 'node:fs';
+import { homedir } from 'node:os';
 
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const CHROME = process.env.CHROME || (process.platform === 'darwin'
+    ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+    : globSync(`${homedir()}/.agent-browser/browsers/chrome-*/chrome`)[0] || 'chromium');
 const PORT = 9333;
 const URL = `http://127.0.0.1:8765/?v=${Date.now()}`;
 
 const chrome = spawn(CHROME, [
     `--remote-debugging-port=${PORT}`,
     '--remote-debugging-address=127.0.0.1',
+    ...(process.env.AMP_ORB ? ['--no-sandbox'] : []),
     '--headless=new',
     '--disable-gpu',
     '--no-first-run',

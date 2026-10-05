@@ -141,3 +141,32 @@ date,exercise_type,duration_minutes,notes
 | Can I use this offline? | **Yes** |
 
 --- 
+
+## Development in Amp Orbs
+
+The app has no build step, package dependencies, database, or required secrets.
+Orbs already provide Node.js and Python. `.agents/setup` checks the toolchain,
+reuses the installed Chrome browser (installing it only if missing), and runs the
+save tests. Amp caches the prepared environment in project snapshots so fresh
+orbs can reuse it. `.agents/resume` is a fast no-op; there is no state to repair.
+
+Run the supervised preview server and get its authenticated portal link:
+
+```sh
+amp orb services ensure
+```
+
+The server is declared in `.amp/services.yaml`; do not start it from setup.
+Generated portal links are ignored by Git.
+
+Run checks from the repository root:
+
+```sh
+node scripts/save.test.mjs
+# Start the preview service first; it also serves the browser check on port 8765.
+node scripts/verify-save-ui.mjs
+```
+
+The browser check uses Node.js 24 or newer and discovers Chrome in the orb's
+agent-browser cache, falling back to `chromium` on Linux. On macOS it uses the
+standard Google Chrome installation. Set `CHROME` to override the browser path.

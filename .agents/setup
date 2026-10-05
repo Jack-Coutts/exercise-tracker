@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+SECONDS=0
+
+echo 'Checking orb toolchain (the app has no package dependencies)...'
+node --input-type=module -e '
+  import { globSync } from "node:fs";
+  if (typeof fetch !== "function" || typeof WebSocket !== "function") {
+    throw new Error("Use Node.js 24 or newer for the browser checks.");
+  }
+'
+node --version
+
+if ! command -v python3 >/dev/null 2>&1; then
+    echo 'Installing Python for the static preview server...'
+    sudo apt-get update
+    sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3
+fi
+python3 --version
+echo "Toolchain checked in ${SECONDS}s."
+
+browser_start=$SECONDS
+if ! command -v chromium >/dev/null 2>&1 &&
+   ! compgen -G "$HOME/.agent-browser/browsers/chrome-*/chrome" >/dev/null; then
+    echo 'Installing Chrome and its system dependencies for browser checks...'
+    agent-browser install --with-deps
+else
+    echo 'Reusing the installed browser; no download needed.'
+fi
+echo "Browser ready in $((SECONDS - browser_start))s."
+
+echo 'Running the dependency-free save tests...'
+node scripts/save.test.mjs
+echo "Orb setup finished in ${SECONDS}s."

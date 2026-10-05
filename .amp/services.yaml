@@ -1,0 +1,8 @@
+services:
+  web:
+    command: python3 -m http.server "$PORT" --bind 0.0.0.0
+    port: 8765
+    health: /index.html
+    portal:
+      title: Exercise Tracker
+      description: Import example.csv to try the tracker. No login is required.
