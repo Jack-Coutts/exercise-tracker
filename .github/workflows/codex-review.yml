@@ -1,0 +1,97 @@
+name: Codex review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, closed]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: codex-review-${{ github.event.pull_request.number }}
+  # Queue rather than cancel: cancelling the job would not stop the T3 turn.
+  cancel-in-progress: false
+
+env:
+  PR_NUMBER: ${{ github.event.pull_request.number }}
+
+jobs:
+  review:
+    # Same-repo PRs from collaborators only: this job runs on a self-hosted
+    # runner, so fork PRs must never reach it.
+    if: >-
+      github.event.action != 'closed' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
+    runs-on: [self-hosted, codex]
+    timeout-minutes: 70
+    steps:
+      # Only the review prompt and helper; the review itself runs in a per-PR
+      # worktree of the local clone, which is the T3 Code project.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          sparse-checkout: .github/codex-review
+
+      - name: Run Codex review in a T3 Code thread
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.local/bin:$PATH"
+          name="${GITHUB_REPOSITORY#*/}"
+          project="$HOME/code/$name"
+          [ -d "$project/.git" ] || gh repo clone "$GITHUB_REPOSITORY" "$project"
+
+          prompt="$RUNNER_TEMP/review-prompt.md"
+          {
+            cat .github/codex-review/review-prompt.md
+            printf '\nPull request #%s. Base %s, head %s. The working directory is a checkout of the head.\n' \
+              "$PR_NUMBER" "$BASE_SHA" "$HEAD_SHA"
+          } >"$prompt"
+
+          session=$(t3 auth session issue --json --ttl 2h --label "codex review $GITHUB_REPOSITORY#$PR_NUMBER")
+          trap 't3 auth session revoke "$(jq -r .sessionId <<<"$session")" >/dev/null' EXIT
+          export T3_TOKEN=$(jq -r .token <<<"$session")
+
+          out="$RUNNER_TEMP/codex-review.md"
+          node .github/codex-review/t3-review.mjs \
+            --project "$project" --worktree "$HOME/code-reviews/$name/pr-$PR_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER" --branch "$HEAD_REF" \
+            --base "$BASE_SHA" --head "$HEAD_SHA" --prompt-file "$prompt" >"$out"
+          test -s "$out"
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$out"
+
+  cleanup:
+    # Remove the PR's worktree once it closes and its thread is idle. The T3
+    # thread stays. A worktree with local edits is kept. Same trust guard as
+    # the review, and the helper comes from the default branch, never the PR.
+    if: >-
+      github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
+    runs-on: [self-hosted, codex]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github/codex-review
+
+      - name: Remove review worktree
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.local/bin:$PATH"
+          name="${GITHUB_REPOSITORY#*/}"
+          [ -d "$HOME/code/$name/.git" ] || exit 0
+          [ -f .github/codex-review/t3-review.mjs ] || exit 0
+          session=$(t3 auth session issue --json --ttl 2h --label "codex review cleanup $GITHUB_REPOSITORY#$PR_NUMBER")
+          trap 't3 auth session revoke "$(jq -r .sessionId <<<"$session")" >/dev/null' EXIT
+          export T3_TOKEN=$(jq -r .token <<<"$session")
+          node .github/codex-review/t3-review.mjs --cleanup \
+            --project "$HOME/code/$name" --worktree "$HOME/code-reviews/$name/pr-$PR_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER"
