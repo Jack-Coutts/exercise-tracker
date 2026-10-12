@@ -44,7 +44,8 @@ truncate_to() {
   git diff --no-color "$base...$head" | truncate_to "$max_diff"
 
   echo "# Changed files at head"
-  git diff --name-only --diff-filter=AMR "$base...$head" | while IFS= read -r f; do
+  # -z keeps names raw; without it git quotes non-ASCII, tab, and newline names.
+  git diff -z --name-only --diff-filter=AMR "$base...$head" | while IFS= read -r -d '' f; do
     case "$f" in
       *.lock | *.png | *.jpg | *.jpeg | *.pdf | *.gz | *.sqlite | *.ico | *.icns) continue ;;
     esac
