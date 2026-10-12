@@ -37,11 +37,14 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="$HOME/.local/bin:$PATH"
+          bundle="$RUNNER_TEMP/context-bundle.md"
           out="$RUNNER_TEMP/codex-review.md"
+          bash .github/codex-review/build-bundle.sh "$BASE_SHA" "$HEAD_SHA" "$bundle"
           {
             cat .github/codex-review/review-prompt.md
-            printf '\nPull request #%s. Base %s, head %s. Review the diff from the merge base to the head.\n' \
+            printf '\nPull request #%s. Base %s, head %s.\n\nCONTEXT BUNDLE\n' \
               "$PR_NUMBER" "$BASE_SHA" "$HEAD_SHA"
+            cat "$bundle"
           } | codex exec -m gpt-6.1-sol -s read-only --skip-git-repo-check -o "$out" -
           test -s "$out"
           gh pr comment "$PR_NUMBER" --body-file "$out"
