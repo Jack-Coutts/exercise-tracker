@@ -104,7 +104,9 @@ const isBusy = (t) =>
   t.session?.status === "starting" || t.session?.status === "running" || !!t.session?.activeTurnId;
 
 // Waits until no turn (e.g. a follow-up) is starting or running, then
-// returns the fresh thread.
+// returns the fresh thread. This is a snapshot, not a lock: T3's workspace
+// lease is not exposed over HTTP, so a follow-up started in the instant
+// between this check and a checkout or cleanup is not prevented.
 async function waitIdle() {
   for (;;) {
     const t = await getThread();
@@ -191,6 +193,16 @@ async function runTurn() {
     t = await getThread();
     if (t.runtimeMode !== runtimeMode || t.interactionMode !== interactionMode) {
       throw new Error("Could not reset the thread's runtime and interaction modes");
+    }
+  }
+  // T3 runs Codex in the thread's saved worktreePath, which a follow-up can
+  // change; point it back at the PR worktree, which is verified next.
+  if (t.projectId !== project.id) throw new Error("PR thread belongs to another project");
+  if (t.worktreePath !== args.worktree) {
+    await dispatch({ type: "thread.meta.update", threadId, worktreePath: args.worktree });
+    t = await getThread();
+    if (t.worktreePath !== args.worktree) {
+      throw new Error("Could not point the PR thread at its worktree");
     }
   }
   if (Date.now() > deadline) throw new Error("No time left to start the review turn");
