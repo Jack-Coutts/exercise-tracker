@@ -190,6 +190,11 @@ async function runTurn() {
     }
   }
   if (Date.now() > deadline) throw new Error("No time left to start the review turn");
+  // A follow-up between attempts may have edited or moved the checkout.
+  const wtHead = git("-C", args.worktree, "rev-parse", "HEAD").trim();
+  if (wtHead !== args.head || git("-C", args.worktree, "status", "--porcelain").trim()) {
+    throw new Error(`${args.worktree} no longer matches the PR head; follow-up changes were kept`);
+  }
 
   const requestedAfter = now();
   const messageId = randomUUID();
