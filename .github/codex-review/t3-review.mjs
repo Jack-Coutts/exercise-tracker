@@ -99,22 +99,36 @@ if (!thread && !args.cleanup) {
   }
 }
 
-// Wait for any running turn (e.g. a follow-up) before touching its worktree.
-while (thread?.session?.activeTurnId) {
-  if (Date.now() > deadline) throw new Error("Timed out waiting for the thread to go idle");
-  await sleep(5000);
-  thread = await getThread();
+// A thread is busy while a turn is starting (no turn id yet) or running.
+const isBusy = (t) =>
+  t.session?.status === "starting" || t.session?.status === "running" || !!t.session?.activeTurnId;
+
+// Waits until no turn (e.g. a follow-up) is starting or running, then
+// returns the fresh thread.
+async function waitIdle() {
+  for (;;) {
+    const t = await getThread();
+    if (!t || !isBusy(t)) return t;
+    if (Date.now() > deadline) throw new Error("Timed out waiting for the thread to go idle");
+    await sleep(5000);
+  }
 }
 
+thread = await waitIdle();
+
 if (args.cleanup) {
-  // PR closed: remove its worktree once no turn is using it. Git refuses to
-  // remove a worktree with local edits, and those are kept.
-  if (existsSync(args.worktree)) {
-    try {
-      git("-C", args.project, "worktree", "remove", args.worktree);
-    } catch {
-      console.error(`Kept ${args.worktree}: it has local edits`);
-    }
+  // PR closed: remove its worktree once no turn is using it. If the thread
+  // cannot be seen (archived threads 404), its state is unknown, so keep the
+  // worktree. Git refuses to remove one with local edits; those are kept too.
+  if (!existsSync(args.worktree)) process.exit(0);
+  if (!thread) {
+    console.error(`Kept ${args.worktree}: PR thread is archived or missing`);
+    process.exit(0);
+  }
+  try {
+    git("-C", args.project, "worktree", "remove", args.worktree);
+  } catch {
+    console.error(`Kept ${args.worktree}: it has local edits`);
   }
   process.exit(0);
 }
@@ -158,22 +172,25 @@ if (!thread) {
   });
 }
 
-// T3 runs a turn with the thread's saved modes, not the request's, so reset
-// them in case a follow-up changed them (e.g. to full-access or plan).
-if (thread && (thread.runtimeMode !== runtimeMode || thread.interactionMode !== interactionMode)) {
-  await dispatch({ type: "thread.runtime-mode.set", threadId, runtimeMode, createdAt: now() });
-  await dispatch({ type: "thread.interaction-mode.set", threadId, interactionMode, createdAt: now() });
-  thread = await getThread();
-  if (thread.runtimeMode !== runtimeMode || thread.interactionMode !== interactionMode) {
-    throw new Error("Could not reset the thread's runtime and interaction modes");
-  }
-}
-
 const prompt = readFileSync(args["prompt-file"], "utf8");
 
 // Starts one review turn and waits for it. Resolves to the reply, or throws
 // with the turn's error.
 async function runTurn() {
+  // Before each attempt: wait out any follow-up, then reset the modes, since
+  // T3 runs a turn with the thread's saved modes, not the request's, and a
+  // follow-up may have changed them (e.g. to full-access or plan).
+  let t = await waitIdle();
+  if (t.runtimeMode !== runtimeMode || t.interactionMode !== interactionMode) {
+    await dispatch({ type: "thread.runtime-mode.set", threadId, runtimeMode, createdAt: now() });
+    await dispatch({ type: "thread.interaction-mode.set", threadId, interactionMode, createdAt: now() });
+    t = await getThread();
+    if (t.runtimeMode !== runtimeMode || t.interactionMode !== interactionMode) {
+      throw new Error("Could not reset the thread's runtime and interaction modes");
+    }
+  }
+  if (Date.now() > deadline) throw new Error("No time left to start the review turn");
+
   const requestedAfter = now();
   const messageId = randomUUID();
   await dispatch({

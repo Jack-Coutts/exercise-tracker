@@ -1,7 +1,10 @@
 name: Codex review
 
+# pull_request_target runs this file and the helper from the default branch,
+# so a PR cannot edit the guards below or the code that runs on the
+# self-hosted runner. PR code is only read by Codex, in a sandboxed worktree.
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review, closed]
 
 permissions:
@@ -28,11 +31,10 @@ jobs:
     runs-on: [self-hosted, codex]
     timeout-minutes: 70
     steps:
-      # Only the review prompt and helper; the review itself runs in a per-PR
-      # worktree of the local clone, which is the T3 Code project.
+      # Trusted prompt and helper from the default branch; the PR head is
+      # checked out separately in a per-PR worktree of the local clone.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
           sparse-checkout: .github/codex-review
 
       - name: Run Codex review in a T3 Code thread
@@ -69,8 +71,7 @@ jobs:
 
   cleanup:
     # Remove the PR's worktree once it closes and its thread is idle. The T3
-    # thread stays. A worktree with local edits is kept. Same trust guard as
-    # the review, and the helper comes from the default branch, never the PR.
+    # thread stays. A worktree with local edits is kept.
     if: >-
       github.event.action == 'closed' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
@@ -79,7 +80,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.repository.default_branch }}
           sparse-checkout: .github/codex-review
 
       - name: Remove review worktree
@@ -88,7 +88,6 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           name="${GITHUB_REPOSITORY#*/}"
           [ -d "$HOME/code/$name/.git" ] || exit 0
-          [ -f .github/codex-review/t3-review.mjs ] || exit 0
           session=$(t3 auth session issue --json --ttl 2h --label "codex review cleanup $GITHUB_REPOSITORY#$PR_NUMBER")
           trap 't3 auth session revoke "$(jq -r .sessionId <<<"$session")" >/dev/null' EXIT
           export T3_TOKEN=$(jq -r .token <<<"$session")
