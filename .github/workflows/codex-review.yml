@@ -1,0 +1,47 @@
+name: Codex review
+
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: codex-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Same-repo PRs from collaborators only: this job runs on a self-hosted
+    # runner, so fork PRs must never reach it.
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
+    runs-on: [self-hosted, codex]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Run Codex review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.local/bin:$PATH"
+          out="$RUNNER_TEMP/codex-review.md"
+          {
+            cat .github/codex-review/review-prompt.md
+            printf '\nPull request #%s. Base %s, head %s. Review the diff from the merge base to the head.\n' \
+              "$PR_NUMBER" "$BASE_SHA" "$HEAD_SHA"
+          } | codex exec -m gpt-6.1-sol -s read-only --skip-git-repo-check -o "$out" -
+          test -s "$out"
+          gh pr comment "$PR_NUMBER" --body-file "$out"
