@@ -158,6 +158,17 @@ if (!thread) {
   });
 }
 
+// T3 runs a turn with the thread's saved modes, not the request's, so reset
+// them in case a follow-up changed them (e.g. to full-access or plan).
+if (thread && (thread.runtimeMode !== runtimeMode || thread.interactionMode !== interactionMode)) {
+  await dispatch({ type: "thread.runtime-mode.set", threadId, runtimeMode, createdAt: now() });
+  await dispatch({ type: "thread.interaction-mode.set", threadId, interactionMode, createdAt: now() });
+  thread = await getThread();
+  if (thread.runtimeMode !== runtimeMode || thread.interactionMode !== interactionMode) {
+    throw new Error("Could not reset the thread's runtime and interaction modes");
+  }
+}
+
 const prompt = readFileSync(args["prompt-file"], "utf8");
 
 // Starts one review turn and waits for it. Resolves to the reply, or throws
@@ -177,10 +188,10 @@ async function runTurn() {
   console.error(`T3 thread ${threadId}: review turn started`);
 
   // T3's HTTP snapshot does not expose which message started a turn, so the
-  // first turn requested after our dispatch is taken as ours. The thread was
-  // idle, so another turn can only follow ours; polling every second until
-  // ours is seen keeps a follow-up from being picked up first. Start failures
-  // are tagged with our message id and surface immediately.
+  // first turn requested after our dispatch is taken as ours, provided no
+  // user message has followed ours yet (the thread was idle, so any other
+  // turn must come from such a message). Start failures are tagged with our
+  // message id and surface immediately.
   let turnId = null;
   while (Date.now() < deadline) {
     await sleep(turnId ? 10000 : 1000);
@@ -192,6 +203,12 @@ async function runTurn() {
       );
       if (failed) throw new Error(`Review turn failed to start: ${failed.payload.detail}`);
       if (!latest || latest.requestedAt < requestedAfter) continue;
+      // A later user message means the latest turn may be its, not ours.
+      const ours = t.messages.findIndex((m) => m.id === messageId);
+      if (ours === -1) continue;
+      if (t.messages.slice(ours + 1).some((m) => m.role === "user")) {
+        throw new Error("A follow-up arrived before the review turn could be identified");
+      }
       turnId = latest.turnId;
     }
     if (latest.turnId !== turnId) {

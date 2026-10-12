@@ -69,13 +69,17 @@ jobs:
 
   cleanup:
     # Remove the PR's worktree once it closes and its thread is idle. The T3
-    # thread stays. A worktree with local edits is kept.
-    if: github.event.action == 'closed'
+    # thread stays. A worktree with local edits is kept. Same trust guard as
+    # the review, and the helper comes from the default branch, never the PR.
+    if: >-
+      github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
     runs-on: [self-hosted, codex]
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.repository.default_branch }}
           sparse-checkout: .github/codex-review
 
       - name: Remove review worktree
@@ -84,6 +88,7 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           name="${GITHUB_REPOSITORY#*/}"
           [ -d "$HOME/code/$name/.git" ] || exit 0
+          [ -f .github/codex-review/t3-review.mjs ] || exit 0
           session=$(t3 auth session issue --json --ttl 2h --label "codex review cleanup $GITHUB_REPOSITORY#$PR_NUMBER")
           trap 't3 auth session revoke "$(jq -r .sessionId <<<"$session")" >/dev/null' EXIT
           export T3_TOKEN=$(jq -r .token <<<"$session")
