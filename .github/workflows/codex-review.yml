@@ -28,6 +28,13 @@ jobs:
     runs-on: [self-hosted, codex]
     timeout-minutes: 70
     steps:
+      # Only the review prompt and helper; the review itself runs in a per-PR
+      # worktree of the local clone, which is the T3 Code project.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          sparse-checkout: .github/codex-review
+
       - name: Run Codex review in a T3 Code thread
         env:
           GH_TOKEN: ${{ github.token }}
@@ -39,24 +46,11 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           name="${GITHUB_REPOSITORY#*/}"
           project="$HOME/code/$name"
-          wt="$HOME/code-reviews/$name/pr-$PR_NUMBER"
-
-          # The review runs in a per-PR worktree of the local clone, which is
-          # the T3 Code project, so follow-ups in the thread see the PR code.
           [ -d "$project/.git" ] || gh repo clone "$GITHUB_REPOSITORY" "$project"
-          git -C "$project" fetch --quiet origin "$BASE_SHA" "pull/$PR_NUMBER/head"
-          git -C "$project" cat-file -e "$BASE_SHA^{commit}"
-          git -C "$project" cat-file -e "$HEAD_SHA^{commit}"
-          if [ -d "$wt" ]; then
-            git -C "$wt" checkout --quiet --detach "$HEAD_SHA"
-          else
-            mkdir -p "$(dirname "$wt")"
-            git -C "$project" worktree add --quiet --detach "$wt" "$HEAD_SHA"
-          fi
 
           prompt="$RUNNER_TEMP/review-prompt.md"
           {
-            cat "$wt/.github/codex-review/review-prompt.md"
+            cat .github/codex-review/review-prompt.md
             printf '\nPull request #%s. Base %s, head %s. The working directory is a checkout of the head.\n' \
               "$PR_NUMBER" "$BASE_SHA" "$HEAD_SHA"
           } >"$prompt"
@@ -66,9 +60,10 @@ jobs:
           export T3_TOKEN=$(jq -r .token <<<"$session")
 
           out="$RUNNER_TEMP/codex-review.md"
-          node "$wt/.github/codex-review/t3-review.mjs" \
-            --project "$project" --worktree "$wt" --repo "$GITHUB_REPOSITORY" \
-            --pr "$PR_NUMBER" --branch "$HEAD_REF" --prompt-file "$prompt" >"$out"
+          node .github/codex-review/t3-review.mjs \
+            --project "$project" --worktree "$HOME/code-reviews/$name/pr-$PR_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER" --branch "$HEAD_REF" \
+            --base "$BASE_SHA" --head "$HEAD_SHA" --prompt-file "$prompt" >"$out"
           test -s "$out"
           gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$out"
 
