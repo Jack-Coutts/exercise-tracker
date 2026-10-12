@@ -2,7 +2,7 @@ name: Codex review
 
 on:
   pull_request:
-    types: [opened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, closed]
 
 permissions:
   contents: read
@@ -10,41 +10,78 @@ permissions:
 
 concurrency:
   group: codex-review-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  # Queue rather than cancel: cancelling the job would not stop the T3 turn.
+  cancel-in-progress: false
+
+env:
+  PR_NUMBER: ${{ github.event.pull_request.number }}
 
 jobs:
   review:
     # Same-repo PRs from collaborators only: this job runs on a self-hosted
     # runner, so fork PRs must never reach it.
     if: >-
+      github.event.action != 'closed' &&
       github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
     runs-on: [self-hosted, codex]
-    timeout-minutes: 60
+    timeout-minutes: 70
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-
-      - name: Run Codex review
+      - name: Run Codex review in a T3 Code thread
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
           export PATH="$HOME/.local/bin:$PATH"
-          bundle="$RUNNER_TEMP/context-bundle.md"
-          out="$RUNNER_TEMP/codex-review.md"
-          bash .github/codex-review/build-bundle.sh "$BASE_SHA" "$HEAD_SHA" "$bundle"
+          name="${GITHUB_REPOSITORY#*/}"
+          project="$HOME/code/$name"
+          wt="$HOME/code-reviews/$name/pr-$PR_NUMBER"
+
+          # The review runs in a per-PR worktree of the local clone, which is
+          # the T3 Code project, so follow-ups in the thread see the PR code.
+          [ -d "$project/.git" ] || gh repo clone "$GITHUB_REPOSITORY" "$project"
+          git -C "$project" fetch --quiet origin "$BASE_SHA" "pull/$PR_NUMBER/head"
+          git -C "$project" cat-file -e "$BASE_SHA^{commit}"
+          git -C "$project" cat-file -e "$HEAD_SHA^{commit}"
+          if [ -d "$wt" ]; then
+            git -C "$wt" checkout --quiet --detach "$HEAD_SHA"
+          else
+            mkdir -p "$(dirname "$wt")"
+            git -C "$project" worktree add --quiet --detach "$wt" "$HEAD_SHA"
+          fi
+
+          prompt="$RUNNER_TEMP/review-prompt.md"
           {
-            cat .github/codex-review/review-prompt.md
-            printf '\nPull request #%s. Base %s, head %s.\n\nCONTEXT BUNDLE\n' \
+            cat "$wt/.github/codex-review/review-prompt.md"
+            printf '\nPull request #%s. Base %s, head %s. The working directory is a checkout of the head.\n' \
               "$PR_NUMBER" "$BASE_SHA" "$HEAD_SHA"
-            cat "$bundle"
-          } | codex exec -m gpt-6.1-sol -s read-only --skip-git-repo-check -o "$out" -
+          } >"$prompt"
+
+          session=$(t3 auth session issue --json --ttl 2h --label "codex review $GITHUB_REPOSITORY#$PR_NUMBER")
+          trap 't3 auth session revoke "$(jq -r .sessionId <<<"$session")" >/dev/null' EXIT
+          export T3_TOKEN=$(jq -r .token <<<"$session")
+
+          out="$RUNNER_TEMP/codex-review.md"
+          node "$wt/.github/codex-review/t3-review.mjs" \
+            --project "$project" --worktree "$wt" --repo "$GITHUB_REPOSITORY" \
+            --pr "$PR_NUMBER" --branch "$HEAD_REF" --prompt-file "$prompt" >"$out"
           test -s "$out"
-          gh pr comment "$PR_NUMBER" --body-file "$out"
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$out"
+
+  cleanup:
+    # Remove the PR's worktree once it closes. The T3 thread stays. A worktree
+    # with uncommitted follow-up edits is kept rather than discarded.
+    if: github.event.action == 'closed'
+    runs-on: [self-hosted, codex]
+    steps:
+      - name: Remove review worktree
+        run: |
+          name="${GITHUB_REPOSITORY#*/}"
+          wt="$HOME/code-reviews/$name/pr-$PR_NUMBER"
+          if [ -d "$wt" ]; then
+            git -C "$HOME/code/$name" worktree remove "$wt" || echo "Kept $wt: it has local changes"
+          fi
