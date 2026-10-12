@@ -99,22 +99,45 @@ if (!thread && !args.cleanup) {
   }
 }
 
-// Wait for any running turn (e.g. a follow-up) before touching its worktree.
-while (thread?.session?.activeTurnId) {
-  if (Date.now() > deadline) throw new Error("Timed out waiting for the thread to go idle");
-  await sleep(5000);
-  thread = await getThread();
+// A thread is busy while a turn is starting (no turn id yet) or running.
+const isBusy = (t) =>
+  t.session?.status === "starting" || t.session?.status === "running" || !!t.session?.activeTurnId;
+
+// Waits until no turn (e.g. a follow-up) is starting or running, then
+// returns the fresh thread. This is a snapshot, not a lock: T3's workspace
+// lease is not exposed over HTTP, so a follow-up started in the instant
+// between this check and a checkout or cleanup is not prevented.
+async function waitIdle() {
+  for (;;) {
+    const t = await getThread();
+    if (!t || !isBusy(t)) return t;
+    if (Date.now() > deadline) throw new Error("Timed out waiting for the thread to go idle");
+    await sleep(5000);
+  }
 }
 
+// Fetch first so the idle check below is fresh when the checkout happens.
+if (!args.cleanup) {
+  git("-C", args.project, "fetch", "--quiet", "origin", args.base, args.head);
+  git("-C", args.project, "cat-file", "-e", `${args.base}^{commit}`);
+  git("-C", args.project, "cat-file", "-e", `${args.head}^{commit}`);
+}
+
+thread = await waitIdle();
+
 if (args.cleanup) {
-  // PR closed: remove its worktree once no turn is using it. Git refuses to
-  // remove a worktree with local edits, and those are kept.
-  if (existsSync(args.worktree)) {
-    try {
-      git("-C", args.project, "worktree", "remove", args.worktree);
-    } catch {
-      console.error(`Kept ${args.worktree}: it has local edits`);
-    }
+  // PR closed: remove its worktree once no turn is using it. If the thread
+  // cannot be seen (archived threads 404), its state is unknown, so keep the
+  // worktree. Git refuses to remove one with local edits; those are kept too.
+  if (!existsSync(args.worktree)) process.exit(0);
+  if (!thread) {
+    console.error(`Kept ${args.worktree}: PR thread is archived or missing`);
+    process.exit(0);
+  }
+  try {
+    git("-C", args.project, "worktree", "remove", args.worktree);
+  } catch {
+    console.error(`Kept ${args.worktree}: it has local edits`);
   }
   process.exit(0);
 }
@@ -122,9 +145,6 @@ if (args.cleanup) {
 // Check out the PR head in the per-PR worktree. Local edits from a follow-up
 // are never discarded: the review fails instead, since it would not be
 // reviewing the PR head.
-git("-C", args.project, "fetch", "--quiet", "origin", args.base, args.head);
-git("-C", args.project, "cat-file", "-e", `${args.base}^{commit}`);
-git("-C", args.project, "cat-file", "-e", `${args.head}^{commit}`);
 if (existsSync(args.worktree)) {
   if (git("-C", args.worktree, "status", "--porcelain").trim()) {
     throw new Error(`${args.worktree} has local edits; commit or remove them, then re-run the review`);
@@ -158,22 +178,40 @@ if (!thread) {
   });
 }
 
-// T3 runs a turn with the thread's saved modes, not the request's, so reset
-// them in case a follow-up changed them (e.g. to full-access or plan).
-if (thread && (thread.runtimeMode !== runtimeMode || thread.interactionMode !== interactionMode)) {
-  await dispatch({ type: "thread.runtime-mode.set", threadId, runtimeMode, createdAt: now() });
-  await dispatch({ type: "thread.interaction-mode.set", threadId, interactionMode, createdAt: now() });
-  thread = await getThread();
-  if (thread.runtimeMode !== runtimeMode || thread.interactionMode !== interactionMode) {
-    throw new Error("Could not reset the thread's runtime and interaction modes");
-  }
-}
-
 const prompt = readFileSync(args["prompt-file"], "utf8");
 
 // Starts one review turn and waits for it. Resolves to the reply, or throws
 // with the turn's error.
 async function runTurn() {
+  // Before each attempt: wait out any follow-up, then reset the modes, since
+  // T3 runs a turn with the thread's saved modes, not the request's, and a
+  // follow-up may have changed them (e.g. to full-access or plan).
+  let t = await waitIdle();
+  if (t.runtimeMode !== runtimeMode || t.interactionMode !== interactionMode) {
+    await dispatch({ type: "thread.runtime-mode.set", threadId, runtimeMode, createdAt: now() });
+    await dispatch({ type: "thread.interaction-mode.set", threadId, interactionMode, createdAt: now() });
+    t = await getThread();
+    if (t.runtimeMode !== runtimeMode || t.interactionMode !== interactionMode) {
+      throw new Error("Could not reset the thread's runtime and interaction modes");
+    }
+  }
+  // T3 runs Codex in the thread's saved worktreePath, which a follow-up can
+  // change; point it back at the PR worktree, which is verified next.
+  if (t.projectId !== project.id) throw new Error("PR thread belongs to another project");
+  if (t.worktreePath !== args.worktree) {
+    await dispatch({ type: "thread.meta.update", threadId, worktreePath: args.worktree });
+    t = await getThread();
+    if (t.worktreePath !== args.worktree) {
+      throw new Error("Could not point the PR thread at its worktree");
+    }
+  }
+  if (Date.now() > deadline) throw new Error("No time left to start the review turn");
+  // A follow-up between attempts may have edited or moved the checkout.
+  const wtHead = git("-C", args.worktree, "rev-parse", "HEAD").trim();
+  if (wtHead !== args.head || git("-C", args.worktree, "status", "--porcelain").trim()) {
+    throw new Error(`${args.worktree} no longer matches the PR head; follow-up changes were kept`);
+  }
+
   const requestedAfter = now();
   const messageId = randomUUID();
   await dispatch({
