@@ -10,6 +10,8 @@
 // Usage: T3_TOKEN=... node t3-review.mjs --project /abs/repo --worktree /abs/wt
 //          --repo owner/name --pr N --branch ref --base SHA --head SHA
 //          --prompt-file path [--timeout 3600]
+//        T3_TOKEN=... node t3-review.mjs --cleanup --project /abs/repo
+//          --worktree /abs/wt --repo owner/name --pr N
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -26,6 +28,7 @@ const { values: args } = parseArgs({
     head: { type: "string" },
     "prompt-file": { type: "string" },
     timeout: { type: "string", default: "3600" },
+    cleanup: { type: "boolean", default: false },
   },
 });
 
@@ -86,7 +89,7 @@ const deadline = Date.now() + Number(args.timeout) * 1000;
 const threadId = stableUuid(`${args.repo}#${args.pr}`);
 const getThread = async () => (await api("GET", `/api/orchestration/threads/${threadId}`))?.thread;
 let thread = await getThread();
-if (!thread) {
+if (!thread && !args.cleanup) {
   // The detail route 404s for archived threads too; unarchive if that is why.
   try {
     await dispatch({ type: "thread.unarchive", threadId });
@@ -101,6 +104,19 @@ while (thread?.session?.activeTurnId) {
   if (Date.now() > deadline) throw new Error("Timed out waiting for the thread to go idle");
   await sleep(5000);
   thread = await getThread();
+}
+
+if (args.cleanup) {
+  // PR closed: remove its worktree once no turn is using it. Git refuses to
+  // remove a worktree with local edits, and those are kept.
+  if (existsSync(args.worktree)) {
+    try {
+      git("-C", args.project, "worktree", "remove", args.worktree);
+    } catch {
+      console.error(`Kept ${args.worktree}: it has local edits`);
+    }
+  }
+  process.exit(0);
 }
 
 // Check out the PR head in the per-PR worktree. Local edits from a follow-up
@@ -148,10 +164,11 @@ const prompt = readFileSync(args["prompt-file"], "utf8");
 // with the turn's error.
 async function runTurn() {
   const requestedAfter = now();
+  const messageId = randomUUID();
   await dispatch({
     type: "thread.turn.start",
     threadId,
-    message: { messageId: randomUUID(), role: "user", text: prompt, attachments: [] },
+    message: { messageId, role: "user", text: prompt, attachments: [] },
     modelSelection,
     runtimeMode,
     interactionMode,
@@ -159,16 +176,21 @@ async function runTurn() {
   });
   console.error(`T3 thread ${threadId}: review turn started`);
 
-  // The first turn requested after our dispatch is ours: the thread was idle,
-  // so another turn can only be requested after it. Only that exact turn,
-  // seen finished as the latest turn, counts; if another turn replaces it
-  // before then, fail rather than guess at its outcome.
+  // T3's HTTP snapshot does not expose which message started a turn, so the
+  // first turn requested after our dispatch is taken as ours. The thread was
+  // idle, so another turn can only follow ours; polling every second until
+  // ours is seen keeps a follow-up from being picked up first. Start failures
+  // are tagged with our message id and surface immediately.
   let turnId = null;
   while (Date.now() < deadline) {
-    await sleep(5000);
+    await sleep(turnId ? 10000 : 1000);
     const t = await getThread();
     const latest = t.latestTurn;
     if (!turnId) {
+      const failed = t.activities?.find(
+        (a) => a.kind === "provider.turn.start.failed" && a.payload?.requestId === messageId,
+      );
+      if (failed) throw new Error(`Review turn failed to start: ${failed.payload.detail}`);
       if (!latest || latest.requestedAt < requestedAfter) continue;
       turnId = latest.turnId;
     }

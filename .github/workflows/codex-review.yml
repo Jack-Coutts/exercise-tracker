@@ -68,15 +68,25 @@ jobs:
           gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$out"
 
   cleanup:
-    # Remove the PR's worktree once it closes. The T3 thread stays. A worktree
-    # with uncommitted follow-up edits is kept rather than discarded.
+    # Remove the PR's worktree once it closes and its thread is idle. The T3
+    # thread stays. A worktree with local edits is kept.
     if: github.event.action == 'closed'
     runs-on: [self-hosted, codex]
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: .github/codex-review
+
       - name: Remove review worktree
         run: |
+          set -euo pipefail
+          export PATH="$HOME/.local/bin:$PATH"
           name="${GITHUB_REPOSITORY#*/}"
-          wt="$HOME/code-reviews/$name/pr-$PR_NUMBER"
-          if [ -d "$wt" ]; then
-            git -C "$HOME/code/$name" worktree remove "$wt" || echo "Kept $wt: it has local changes"
-          fi
+          [ -d "$HOME/code/$name/.git" ] || exit 0
+          session=$(t3 auth session issue --json --ttl 2h --label "codex review cleanup $GITHUB_REPOSITORY#$PR_NUMBER")
+          trap 't3 auth session revoke "$(jq -r .sessionId <<<"$session")" >/dev/null' EXIT
+          export T3_TOKEN=$(jq -r .token <<<"$session")
+          node .github/codex-review/t3-review.mjs --cleanup \
+            --project "$HOME/code/$name" --worktree "$HOME/code-reviews/$name/pr-$PR_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER"
