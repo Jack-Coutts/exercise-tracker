@@ -67,6 +67,20 @@ jobs:
             --repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER" --branch "$HEAD_REF" \
             --base "$BASE_SHA" --head "$HEAD_SHA" --prompt-file "$prompt" >"$out"
           test -s "$out"
+
+          # The review can take a while; don't post to a closed PR, and flag a
+          # review whose head is no longer the PR's.
+          pr_state=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --json state,headRefOid -q '.state + " " + .headRefOid')
+          read -r state live_head <<<"$pr_state"
+          if [ "$state" != OPEN ]; then
+            echo "PR is $state; not posting the review"
+            exit 0
+          fi
+          if [ "$live_head" != "$HEAD_SHA" ]; then
+            { printf '> Reviewed head %s; the PR has since moved to %s. A newer review is queued.\n\n' \
+                "$HEAD_SHA" "$live_head"; cat "$out"; } >"$out.tmp" && mv "$out.tmp" "$out"
+          fi
           gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$out"
 
   cleanup:

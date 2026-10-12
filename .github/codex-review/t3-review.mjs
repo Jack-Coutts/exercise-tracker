@@ -114,6 +114,13 @@ async function waitIdle() {
   }
 }
 
+// Fetch first so the idle check below is fresh when the checkout happens.
+if (!args.cleanup) {
+  git("-C", args.project, "fetch", "--quiet", "origin", args.base, args.head);
+  git("-C", args.project, "cat-file", "-e", `${args.base}^{commit}`);
+  git("-C", args.project, "cat-file", "-e", `${args.head}^{commit}`);
+}
+
 thread = await waitIdle();
 
 if (args.cleanup) {
@@ -136,9 +143,6 @@ if (args.cleanup) {
 // Check out the PR head in the per-PR worktree. Local edits from a follow-up
 // are never discarded: the review fails instead, since it would not be
 // reviewing the PR head.
-git("-C", args.project, "fetch", "--quiet", "origin", args.base, args.head);
-git("-C", args.project, "cat-file", "-e", `${args.base}^{commit}`);
-git("-C", args.project, "cat-file", "-e", `${args.head}^{commit}`);
 if (existsSync(args.worktree)) {
   if (git("-C", args.worktree, "status", "--porcelain").trim()) {
     throw new Error(`${args.worktree} has local edits; commit or remove them, then re-run the review`);
