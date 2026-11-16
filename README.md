@@ -55,7 +55,7 @@ You can make this feel like a real app by adding it to your home screen:
 ## 🎨 Features
 
 ### Custom Exercise Types
-The app comes with default exercise types (cycling, gym, squash, running, pilates, swimming), but you can **add your own** in the "Exercise Types" section.  Custom types are saved when you save your CSV.
+The app comes with default exercise types (cycling, workout, squash, running, pilates, swimming), but you can **add your own** in the "Exercise Types" section.  Custom types are saved when you save your CSV.
 
 ### Heatmap Intensity Levels
 The consistency heatmaps show your daily activity with varying intensity: 
@@ -96,7 +96,8 @@ View your exercise breakdown:
 ### My CSV won't import
 - Make sure your file has the correct headers:  `date,exercise_type,duration_minutes,notes`
 - Dates must be in `YYYY-MM-DD` format (e.g., `2025-01-15`)
-- Duration must be a whole number (no decimals)
+- Duration must be a whole number above zero (no decimals)
+- If any row breaks these rules, nothing is imported and each problem row is listed
 
 ### I accidentally closed without saving
 Unfortunately, any unsaved entries are lost. This is the trade-off for privacy—no cloud means no automatic backup.  Consider setting a reminder to save after each session.
@@ -107,6 +108,29 @@ Unfortunately, any unsaved entries are lost. This is the trade-off for privacy�
 
 ### I want to merge two CSV files
 Open both files in Excel or Google Sheets, copy the rows (without headers) from one file, and paste them at the bottom of the other.  Save and re-import.
+
+---
+
+## 📝 Note File Format
+
+You can keep your log as one Markdown note (for example in Bear), export it as `.md` or `.txt`, and import that file in place of a CSV.
+
+```markdown
+# Exercise log
+
+#### 2026-11-16 gym 60
+Legs and cardio.
+Left knee a bit sore after.
+
+#### 2026-11-15 off sick
+```
+
+- Each session starts with a `#### YYYY-MM-DD type minutes` heading. Every line under it, up to the next `#### ` heading, is that session's notes.
+- `off sick` and `on holiday` need no minutes.
+- Any type is accepted, so a new activity needs no setup. A misspelt type becomes a new type, so glance at the Exercise Types list after an import.
+- A line that holds only tags, such as `#health/exercise`, is ignored wherever it sits. Keep tags off the `#### ` heading lines.
+- After a note import, **Save** downloads the PDF report only. The note stays your database, so add and fix sessions in the note.
+- If any heading cannot be read, nothing is imported and each problem is listed with its line number.
 
 ---
 

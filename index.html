@@ -240,7 +240,7 @@
         <div id="uploadPrompt" class="drop-zone">
             <div style="font-size: 18px; margin-bottom: 16px;">Welcome to Exercise Tracker</div>
             <div class="drop-zone-text">Import your existing workout data or start fresh</div>
-            <button type="button" onclick="document.getElementById('csvFileInput').click()">Import CSV</button>
+            <button type="button" onclick="document.getElementById('csvFileInput').click()">Import CSV or note</button>
             <div class="drop-zone-text">or</div>
             <button type="button" class="secondary" onclick="tracker.startFresh()">Start Fresh</button>
         </div>
@@ -253,6 +253,7 @@
 
             <div class="card add-exercise-section">
                 <h2>Add Exercise</h2>
+                <div id="noteNotice" class="drop-zone-text hidden">This log came from a note. Sessions you add or delete here are not written back, so make the change in the note as well.</div>
                 <div class="input-row">
                     <input type="date" id="exerciseDate">
                     <select id="exerciseTypeSelect"></select>
@@ -298,7 +299,7 @@
             </div>
         </div>
 
-        <input type="file" id="csvFileInput" accept=".csv" style="display: none" onchange="handleFileImport(event)">
+        <input type="file" id="csvFileInput" accept=".csv,.md,.txt" style="display: none" onchange="handleFileImport(event)">
     </div>
 
     <script>
@@ -1152,25 +1153,73 @@
                 return html;
             }
 
+            isRealDate(str) {
+                const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str);
+                return !!m && this.dateToStr(new Date(m[1], m[2] - 1, m[3])) === str;
+            }
+
+            // All or nothing, like importNote: a row that cannot be read refuses the file and is never guessed at.
             importCSV(csv) {
                 const rows = this.parseCSV(csv.trim());
-                if (rows.length < 2) return;
                 const headers = rows[0].map(h => h.toLowerCase().trim());
-                this.exercises = rows.slice(1).map(v => {
-                    const rawType = v[headers.indexOf('exercise_type')];
-                    let type = rawType;
-                    if (rawType && this.isSickType(rawType)) type = SICK_TYPE;
-                    else if (rawType && this.isHolidayType(rawType)) type = HOLIDAY_TYPE;
-                    if (type && !this.exerciseTypes.includes(type)) this.exerciseTypes.push(type);
-                    return {
-                        id: Date.now() + Math.random(),
-                        date: v[headers.indexOf('date')],
-                        exercise_type: type,
-                        duration_minutes: OFF_TYPES.includes(type) ? 0 : parseInt(v[headers.indexOf('duration_minutes')]),
-                        notes: v[headers.indexOf('notes')] || ''
-                    };
-                }).filter(ex => ex.date);
-                OFF_TYPES.forEach(t => { if (!this.exerciseTypes.includes(t)) this.exerciseTypes.push(t); });
+                const cell = (v, name) => (v[headers.indexOf(name)] || '').trim();
+                const errors = ['date', 'exercise_type', 'duration_minutes'].filter(h => !headers.includes(h)).map(h => `The header row has no "${h}" column.`);
+                const exercises = [], types = [...this.exerciseTypes];
+                if (!errors.length) rows.slice(1).forEach((v, i) => {
+                    if (v.every(c => !c.trim())) return;
+                    const fail = why => errors.push(`Row ${i + 2}: ${why}\n    ${v.join(',')}`);
+                    const date = cell(v, 'date'), mins = cell(v, 'duration_minutes');
+                    let type = v[headers.indexOf('exercise_type')] || '';
+                    if (this.isSickType(type)) type = SICK_TYPE;
+                    else if (this.isHolidayType(type)) type = HOLIDAY_TYPE;
+                    const off = OFF_TYPES.includes(type);
+                    if (!this.isRealDate(date)) return fail('the date must be a real date written YYYY-MM-DD');
+                    if (!type.trim()) return fail('the exercise type is missing');
+                    if (!off && !(/^\d+$/.test(mins) && parseInt(mins) > 0)) return fail('the minutes must be a whole number above zero');
+                    if (!types.includes(type)) types.push(type);
+                    exercises.push({ id: Date.now() + Math.random(), date, exercise_type: type, duration_minutes: off ? 0 : parseInt(mins), notes: v[headers.indexOf('notes')] || '' });
+                });
+                if (errors.length) return alert(`Nothing was imported. Fix these in the CSV and try again:\n\n${errors.join('\n')}`);
+                this.exercises = exercises;
+                this.exerciseTypes = types;
+                this.startFresh();
+            }
+
+            // Note format: "#### YYYY-MM-DD type minutes" starts a session and the lines under it are its notes.
+            // Any type is accepted, as in a CSV, so a misspelt type arrives as a new type.
+            parseNote(text) {
+                const types = new Set(this.exerciseTypes), sessions = [], errors = [];
+                let current = null;
+                text.split(/\r?\n/).forEach((line, i) => {
+                    // A line made only of Bear tags (#tag, #tag/sub, #two words#) is not part of any session.
+                    if (/^\s*(?:#[^#\s][^#]*#\s*|#[^#\s]+\s*)+$/.test(line)) return;
+                    if (!line.startsWith('#### ')) { if (current) current.notes += line + '\n'; return; }
+                    const m = line.match(/^#### (\S+)\s+(.+?)(?:\s+(\d+))?\s*$/);
+                    const fail = why => errors.push(`Line ${i + 1}: ${why}\n    ${line}`);
+                    if (!m) return fail('expected "#### YYYY-MM-DD type minutes"');
+                    const date = m[1], type = m[2].toLowerCase(), mins = parseInt(m[3] || '0');
+                    if (!this.isRealDate(date)) return fail('the date must be a real date written YYYY-MM-DD');
+                    types.add(type);
+                    const off = OFF_TYPES.includes(type);
+                    if (!off && !mins) return fail('minutes are missing');
+                    current = { id: Date.now() + Math.random(), date, exercise_type: type, duration_minutes: off ? 0 : mins, notes: '' };
+                    sessions.push(current);
+                });
+                sessions.forEach(s => { s.notes = s.notes.trim(); });
+                if (!sessions.length && !errors.length) errors.push('No "#### YYYY-MM-DD type minutes" headings found.');
+                return { sessions, types: [...types], errors };
+            }
+
+            // All or nothing: one bad heading refuses the whole note, so a session is never dropped quietly.
+            importNote(text) {
+                const { sessions, types, errors } = this.parseNote(text);
+                if (errors.length) return alert(`Nothing was imported. Fix these in the note and try again:\n\n${errors.join('\n')}`);
+                this.exercises = sessions;
+                this.exerciseTypes = types;
+                // The note is the database from here on, so Save must not write a second one.
+                this.fromNote = true;
+                document.getElementById('noteNotice').classList.remove('hidden');
+                document.getElementById('saveButton').textContent = 'Save PDF';
                 this.startFresh();
             }
 
@@ -1215,6 +1264,7 @@
                 };
                 const csv = this.buildCSV();
                 const pdf = this.buildPdfReport();
+                if (this.fromNote) return this.triggerDownload(new Blob([pdf], { type: 'application/pdf' }), names.pdf);
                 const files = [
                     { name: names.csv, data: csv },
                     { name: names.pdf, data: pdf }
@@ -1519,8 +1569,9 @@
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
-            reader.onload = (evt) => tracker.importCSV(evt.target.result);
+            reader.onload = (evt) => /\.csv$/i.test(file.name) ? tracker.importCSV(evt.target.result) : tracker.importNote(evt.target.result);
             reader.readAsText(file);
+            e.target.value = ''; // lets the same file be picked again after a refused import is fixed
         }
     </script>
 </body>

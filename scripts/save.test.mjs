@@ -285,4 +285,53 @@ const priorPdf = 'OLD PDF CONTENTS';
     assert.equal(tracker.buildCSV(), csv, 'a second save writes the same file');
 }
 
+{
+    // A note imports its sessions with multi-line notes, and one bad heading refuses the whole note.
+    const { tracker } = loadTracker();
+    // Tag-only lines are skipped wherever they sit; "#1 court" is prose and stays.
+    const good = '# Exercise log\n#health/exercise\n\n#### 2026-11-16 gym 60\nLegs.\n#gym #leg day#\n\nKnee sore.\n\n#### 2026-11-15 Off Sick\n#### 2026-11-14 zone 2 40\n#1 court\n#log\n';
+    tracker.importNote(good);
+    const rows = () => JSON.parse(JSON.stringify(tracker.exercises.map(({ date, exercise_type, duration_minutes, notes }) => ({ date, exercise_type, duration_minutes, notes }))));
+    const expected = [
+        { date: '2026-11-16', exercise_type: 'gym', duration_minutes: 60, notes: 'Legs.\n\nKnee sore.' },
+        { date: '2026-11-15', exercise_type: 'off sick', duration_minutes: 0, notes: '' },
+        { date: '2026-11-14', exercise_type: 'zone 2', duration_minutes: 40, notes: '#1 court' }
+    ];
+    assert.deepEqual(rows(), expected);
+    assert.equal(tracker.exerciseTypes.includes('zone 2'), true, 'a new type in a heading reaches the type list');
+
+    const bad = '#### 2026-11-16 60\n#### 2026-02-30 squash 45\n#### 2026-11-12 squash\n#### 16/11/2026 squash 45\n#### 2026-11-10 squash 45\n';
+    assert.equal(tracker.parseNote(bad).errors.map(e => e.split(':')[0]).join(), 'Line 1,Line 2,Line 3,Line 4');
+    tracker.importNote(bad);
+    assert.deepEqual(rows(), expected, 'a refused note leaves the loaded data untouched');
+    assert.equal(tracker.parseNote('just some text').errors.length, 1, 'a note with no sessions is refused');
+}
+
+{
+    // After a note import, Save writes the PDF alone: the note is the database, so no CSV may appear.
+    const { tracker, downloads } = loadTracker({ showDirectoryPicker: async () => { throw new Error('note mode must not open the folder picker'); } });
+    tracker.importNote('#### 2026-11-16 squash 45\n');
+    await tracker.saveReport();
+    const saved = downloads.filter(d => d.blob);
+    assert.equal(saved.length, 1);
+    assert.equal(saved[0].filename.endsWith('.pdf'), true);
+    assert.equal(saved[0].type, 'application/pdf');
+}
+
+{
+    // A CSV with any unreadable row is refused whole, and the loaded data stays as it was.
+    const { tracker } = loadTracker();
+    const head = 'date,exercise_type,duration_minutes,notes\n';
+    tracker.importCSV(head + '2026-01-02,squash,45,"ok"\n\n2026-01-01,Off Sick,,""\n');
+    const state = () => tracker.exercises.map(e => `${e.date}|${e.exercise_type}|${e.duration_minutes}`).join();
+    const loaded = '2026-01-02|squash|45,2026-01-01|off sick|0';
+    assert.equal(state(), loaded);
+    for (const row of ['2026-02-30,squash,45,""', '02/01/2026,squash,45,""', '2026-01-02,squash,45.5,""', '2026-01-02,squash,,""', '2026-01-02,,45,""']) {
+        tracker.importCSV(head + '2026-01-03,running,30,""\n' + row + '\n');
+        assert.equal(state(), loaded, `refused: ${row}`);
+    }
+    tracker.importCSV('date,exercise_type,notes\n2026-01-03,running,""\n');
+    assert.equal(state(), loaded, 'a missing column is refused');
+}
+
 console.log('save.test.mjs: all assertions passed');
