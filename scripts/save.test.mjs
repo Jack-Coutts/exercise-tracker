@@ -265,4 +265,24 @@ const priorPdf = 'OLD PDF CONTENTS';
     assert.equal(src.includes('this.exercises'), true, 'PDF log dumps the full history');
 }
 
+{
+    // A note with a line break, comma or quote, and a type with a comma, must survive save then load.
+    const { tracker } = loadTracker();
+    tracker.exercises = [
+        { id: 1, date: '2026-01-02', exercise_type: 'squash', duration_minutes: 240, notes: 'first line\nsecond line, "quoted"' },
+        { id: 2, date: '2026-01-01', exercise_type: 'sauna, cold plunge', duration_minutes: 90, notes: '' }
+    ];
+    const csv = tracker.buildCSV();
+    tracker.importCSV(csv);
+    assert.deepEqual(
+        // JSON copy: the rows come from the vm context, so their prototypes differ from ours.
+        JSON.parse(JSON.stringify(tracker.exercises.map(({ date, exercise_type, duration_minutes, notes }) => ({ date, exercise_type, duration_minutes, notes })))),
+        [
+            { date: '2026-01-02', exercise_type: 'squash', duration_minutes: 240, notes: 'first line\nsecond line, "quoted"' },
+            { date: '2026-01-01', exercise_type: 'sauna, cold plunge', duration_minutes: 90, notes: '' }
+        ]
+    );
+    assert.equal(tracker.buildCSV(), csv, 'a second save writes the same file');
+}
+
 console.log('save.test.mjs: all assertions passed');

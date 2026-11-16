@@ -1153,11 +1153,10 @@
             }
 
             importCSV(csv) {
-                const lines = csv.trim().split('\n');
-                if (lines.length < 2) return;
-                const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
-                this.exercises = lines.slice(1).map(l => {
-                    const v = this.parseCSVLine(l);
+                const rows = this.parseCSV(csv.trim());
+                if (rows.length < 2) return;
+                const headers = rows[0].map(h => h.toLowerCase().trim());
+                this.exercises = rows.slice(1).map(v => {
                     const rawType = v[headers.indexOf('exercise_type')];
                     let type = rawType;
                     if (rawType && this.isSickType(rawType)) type = SICK_TYPE;
@@ -1168,26 +1167,38 @@
                         date: v[headers.indexOf('date')],
                         exercise_type: type,
                         duration_minutes: OFF_TYPES.includes(type) ? 0 : parseInt(v[headers.indexOf('duration_minutes')]),
-                        notes: (v[headers.indexOf('notes')] || '').replace(/^"|"$/g, '')
+                        notes: v[headers.indexOf('notes')] || ''
                     };
                 }).filter(ex => ex.date);
                 OFF_TYPES.forEach(t => { if (!this.exerciseTypes.includes(t)) this.exerciseTypes.push(t); });
                 this.startFresh();
             }
 
-            parseCSVLine(l) {
-                const r = []; let c = '', q = false;
-                for(let char of l) {
-                    if(char === '"') q = !q;
-                    else if(char === ',' && !q) { r.push(c); c = ''; }
-                    else c += char;
+            // Parses the whole file at once: a quoted field may hold commas, line breaks and "" quotes.
+            parseCSV(text) {
+                const rows = []; let row = [], c = '', q = false;
+                for (let i = 0; i < text.length; i++) {
+                    const ch = text[i];
+                    if (q) {
+                        if (ch === '"' && text[i + 1] === '"') { c += '"'; i++; }
+                        else if (ch === '"') q = false;
+                        else c += ch;
+                    }
+                    else if (ch === '"') q = true;
+                    else if (ch === ',') { row.push(c); c = ''; }
+                    else if (ch === '\n') { row.push(c); rows.push(row); row = []; c = ''; }
+                    else if (ch !== '\r') c += ch;
                 }
-                r.push(c); return r;
+                row.push(c); rows.push(row);
+                return rows;
             }
 
             buildCSV() {
                 const h = 'date,exercise_type,duration_minutes,notes';
-                const r = this.exercises.map(ex => `${ex.date},${ex.exercise_type},${ex.duration_minutes},"${(ex.notes || '').replace(/"/g, '""')}"`);
+                const quote = s => `"${(s || '').replace(/"/g, '""')}"`;
+                // Quote the type only when it needs it, so existing files stay byte-identical.
+                const type = t => /[",\n]/.test(t) ? quote(t) : t;
+                const r = this.exercises.map(ex => `${ex.date},${type(ex.exercise_type)},${ex.duration_minutes},${quote(ex.notes)}`);
                 return [h, ...r].join('\n');
             }
 
