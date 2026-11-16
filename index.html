@@ -1551,17 +1551,26 @@
 
                 const typeTotals = {}, days = {};
                 sessions.forEach(ex => {
-                    const t = typeTotals[ex.exercise_type] ||= { type: ex.exercise_type, mins: 0, sessions: 0 };
+                    const t = typeTotals[ex.exercise_type] ||= { type: ex.exercise_type, mins: 0, sessions: 0, durations: [], last: ex.date };
                     t.mins += ex.duration_minutes;
                     t.sessions++;
+                    t.durations.push(ex.duration_minutes);
+                    if (ex.date > t.last) t.last = ex.date;
                     const d = days[ex.date] ||= { date: ex.date, cycling: 0, other: 0, sessions: 0, byType: {} };
                     d[split(ex)] += ex.duration_minutes;
                     d.sessions++;
                     d.byType[ex.exercise_type] = (d.byType[ex.exercise_type] || 0) + ex.duration_minutes;
                 });
+                // The middle value; with an even count, the mean of the middle two.
+                const median = list => { const v = [...list].sort((a, b) => a - b), n = v.length; return n % 2 ? v[(n - 1) / 2] : (v[n / 2 - 1] + v[n / 2]) / 2; };
                 const types = Object.values(typeTotals).sort((a, b) => b.mins - a.mins || (a.type < b.type ? -1 : 1));
                 let slot = 0;
-                types.forEach(t => { t.fill = t.type === CYCLING_TYPE ? CYCLING_FILL : (TYPE_COLOURS[slot++] || EXTRA_TYPE_FILL); });
+                types.forEach(t => {
+                    t.fill = t.type === CYCLING_TYPE ? CYCLING_FILL : (TYPE_COLOURS[slot++] || EXTRA_TYPE_FILL);
+                    t.median = median(t.durations);
+                    t.longest = Math.max(...t.durations);
+                    delete t.durations;
+                });
                 const dayList = Object.values(days).sort((a, b) => a.date < b.date ? -1 : 1);
                 // A day's main activity is the one with the most minutes; a tie goes to the activity with more time overall.
                 // Cycling only wins a day when nothing else was done, or it would hide the other activity on most days.
@@ -1574,7 +1583,7 @@
 
                 const months = [];
                 for (let d = new Date(first.getFullYear(), first.getMonth(), 1); d <= last; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
-                    months.push({ key: this.dateToStr(d).slice(0, 7), label: 'JFMAMJJASOND'[d.getMonth()], cycling: 0, other: 0, sessions: {} });
+                    months.push({ key: this.dateToStr(d).slice(0, 7), label: 'JFMAMJJASOND'[d.getMonth()], cycling: 0, other: 0, sessions: {}, activeDays: 0 });
                 }
                 const monthOf = Object.fromEntries(months.map(m => [m.key, m]));
                 sessions.forEach(ex => {
@@ -1582,6 +1591,8 @@
                     m[split(ex)] += ex.duration_minutes;
                     m.sessions[ex.exercise_type] = (m.sessions[ex.exercise_type] || 0) + 1;
                 });
+
+                dayList.forEach(d => { monthOf[d.date.slice(0, 7)].activeDays++; });
 
                 const weeks = [];
                 for (let d = addDays(first, -((first.getDay() + 6) % 7)); d <= last; d = addDays(d, 7)) {
@@ -1607,10 +1618,22 @@
                 }
                 gaps.sort((a, b) => b.days - a.days || (a.from < b.from ? -1 : 1));
 
+                // Same rule as calculateLongestStreak: a run of active days continues across days that are only sick or holiday.
+                const streaks = [];
+                dayList.forEach((d, i) => {
+                    let bridged = i > 0;
+                    for (let x = i > 0 ? addDays(toDate(dayList[i - 1].date), 1) : null; bridged && x < toDate(d.date); x = addDays(x, 1)) bridged = off.has(this.dateToStr(x));
+                    if (bridged) { const run = streaks[streaks.length - 1]; run.to = d.date; run.days++; }
+                    else streaks.push({ from: d.date, to: d.date, days: 1 });
+                });
+                streaks.sort((a, b) => b.days - a.days || (a.from < b.from ? -1 : 1));
+
                 const top = (list, f) => list.reduce((a, b) => f(b) > f(a) ? b : a);
                 const mins = x => x.cycling + x.other;
                 return {
-                    types, days, months, weeks, activeDaysPerWeek, weekdayOther, gaps,
+                    types, days, months, weeks, activeDaysPerWeek, weekdayOther, gaps, streaks,
+                    sessionsPerDay: [1, 2, 3].map(n => dayList.filter(d => n < 3 ? d.sessions === n : d.sessions >= 3).length),
+                    typicalWeek: { mins: median(weeks.map(mins)), other: median(weeks.map(w => w.other)), activeDays: median(weeks.map(w => w.activeDays)) },
                     sessionCount: sessions.length,
                     activeDays: dayList.length,
                     totals: { cycling: dayList.reduce((s, d) => s + d.cycling, 0), other: dayList.reduce((s, d) => s + d.other, 0) },
@@ -1689,6 +1712,23 @@
                 this.drawPdfLine(pdf, x, x + w, top + h, '#c3c2b7', 0.5);
             }
 
+            // A plain table: the first column is left aligned, the others right aligned at even steps.
+            drawPdfTable(pdf, headers, rows, firstW = 110) {
+                const colW = (pdf.width - firstW) / (headers.length - 1);
+                const line = (cells, opts) => {
+                    pdf.ensure(16);
+                    cells.forEach((c, i) => i === 0
+                        ? this.drawPdfTextAt(pdf, c, pdf.margin, pdf.y, 8, opts)
+                        : this.drawPdfTextAt(pdf, c, pdf.margin + firstW + colW * i, pdf.y, 8, { ...opts, align: 'right' }));
+                    pdf.y += 12;
+                    this.drawPdfLine(pdf, pdf.margin, pdf.W - pdf.margin, pdf.y, '#eeeeee', 0.3);
+                    pdf.y += 4;
+                };
+                line(headers, { color: '#666666' });
+                rows.forEach(r => line(r, {}));
+                pdf.y += 10;
+            }
+
             drawPdfPatterns(pdf) {
                 const p = this.calculatePatterns();
                 if (!p) return;
@@ -1733,20 +1773,36 @@
                 this.drawPdfBars(pdf, axisX, pdf.y, axisW, 78, p.months.map(m => ({ segs: split(m), top: hours(m.cycling + m.other), label: m.label })), { gap: 6 });
                 pdf.y += 78 + 18;
 
-                const weekPeak = Math.max(...p.weeks.map(w => w.cycling + w.other)) / 60;
-                const step = weekPeak > 12 ? 5 : weekPeak > 4 ? 2 : 1;
-                const ticks = [];
-                for (let t = step; t <= weekPeak; t += step) ticks.push(t * 60);
-                this.drawPdfSection(pdf, 126, 'Hours by week',
-                    `Total hours in each week (Monday to Sunday), stacked. n = ${p.weeks.length} weeks, from the week of the first session to the week of the last, so the first and last may be part weeks. A red or blue mark under a week means it held sick or holiday days. The letter marks the first week that starts in each month.`);
-                this.drawPdfLegend(pdf, [...splitLegend, { fill: HEATMAP_FILL.sick, label: 'sick days in week' }, { fill: HEATMAP_FILL.holiday, label: 'holiday days in week' }]);
-                pdf.y += 4;
-                this.drawPdfBars(pdf, axisX, pdf.y, axisW, 78, p.weeks.map((w, i) => ({
-                    segs: split(w),
-                    marks: [w.sick ? HEATMAP_FILL.sick : '#ffffff', w.holiday ? HEATMAP_FILL.holiday : '#ffffff'],
-                    label: i === 0 || w.start.slice(5, 7) !== p.weeks[i - 1].start.slice(5, 7) ? 'JFMAMJJASOND'[Number(w.start.slice(5, 7)) - 1] : ''
-                })), { gap: 1.2, ticks, tickLabel: t => `${t / 60}h` });
-                pdf.y += 78 + 24;
+                const monthName = m => this.formatDate(m.key + '-01').slice(3);
+                this.drawPdfSection(pdf, 60, 'Month by month',
+                    `The same months as figures. Active days are days with at least one session. ${sessionsN}.`);
+                this.drawPdfTable(pdf, ['Month', 'Sessions', 'Active days', 'Total time', 'Cycling', 'Everything else'], p.months.map(m => [
+                    monthName(m), String(Object.values(m.sessions).reduce((a, b) => a + b, 0)), String(m.activeDays),
+                    this.formatMins(m.cycling + m.other), this.formatMins(m.cycling), this.formatMins(m.other)
+                ]));
+
+                const offLegend = [{ fill: HEATMAP_FILL.sick, label: 'sick days in week' }, { fill: HEATMAP_FILL.holiday, label: 'holiday days in week' }];
+                const weekChart = (title, caption, legend, segsFor) => {
+                    const peak = Math.max(...p.weeks.map(w => segsFor(w).reduce((sum, seg) => sum + seg.v, 0))) / 60;
+                    const step = peak > 12 ? 5 : peak > 4 ? 2 : 1;
+                    const ticks = [];
+                    for (let t = step; t <= peak; t += step) ticks.push(t * 60);
+                    this.drawPdfSection(pdf, 126, title, caption);
+                    this.drawPdfLegend(pdf, legend);
+                    pdf.y += 4;
+                    this.drawPdfBars(pdf, axisX, pdf.y, axisW, 78, p.weeks.map((w, i) => ({
+                        segs: segsFor(w),
+                        marks: [w.sick ? HEATMAP_FILL.sick : '#ffffff', w.holiday ? HEATMAP_FILL.holiday : '#ffffff'],
+                        label: i === 0 || w.start.slice(5, 7) !== p.weeks[i - 1].start.slice(5, 7) ? 'JFMAMJJASOND'[Number(w.start.slice(5, 7)) - 1] : ''
+                    })), { gap: 1.2, ticks, tickLabel: t => `${t / 60}h` });
+                    pdf.y += 78 + 24;
+                };
+                weekChart('Hours by week',
+                    `Total hours in each week (Monday to Sunday), stacked. n = ${p.weeks.length} weeks, from the week of the first session to the week of the last, so the first and last may be part weeks. A red or blue mark under a week means it held sick or holiday days. The letter marks the first week that starts in each month.`,
+                    [...splitLegend, ...offLegend], split);
+                weekChart('Hours by week, without cycling',
+                    `The same ${p.weeks.length} weeks with cycling left out, so the rise and fall of all other exercise is easier to see. The scale differs from the chart above.`,
+                    [{ fill: OTHER_FILL, label: 'everything else' }, ...offLegend], w => [{ v: w.other, fill: OTHER_FILL }]);
 
                 const own = p.types.filter(t => t.sessions >= MIN_ROW_SESSIONS).slice(0, MAX_TYPE_ROWS);
                 const rest = p.types.filter(t => !own.includes(t));
@@ -1771,9 +1827,23 @@
                 });
                 pdf.y += 18;
 
+                this.drawPdfSection(pdf, 60, 'Each activity in figures',
+                    `One row per activity, most time first. Per week is sessions divided by the ${p.weeks.length} weeks of the report. The median session is the middle session length, in minutes. ${sessionsN}.`);
+                this.drawPdfTable(pdf, ['Activity', 'Sessions', 'Per week', 'Total time', 'Median session', 'Longest session', 'Last done'], p.types.map(t => [
+                    t.type, String(t.sessions), (t.sessions / p.weeks.length).toFixed(1), this.formatMins(t.mins), `${Math.round(t.median)} min`, `${t.longest} min`, shortDate(t.last)
+                ]));
+
                 const half = (pdf.width - 24) / 2;
-                this.drawPdfSection(pdf, 118, 'The shape of a week',
-                    `Left: how many weeks had 0 to 7 active days (n = ${p.weeks.length} weeks, counted as in Hours by week, including weeks with sick or holiday days). Right: total hours on each weekday, excluding cycling.`);
+                this.drawPdfSection(pdf, 170, 'The shape of a week',
+                    `Medians are the middle week of ${p.weeks.length}, counted as in Hours by week, including part weeks and weeks with sick or holiday days. Days are the ${p.activeDays} active days. Lower left: how many weeks had 0 to 7 active days. Lower right: total hours on each weekday, excluding cycling.`);
+                const tw = p.typicalWeek;
+                this.drawPdfStats(pdf, [
+                    { value: this.formatMins(Math.round(tw.mins)), label: 'Median week, total time' },
+                    { value: this.formatMins(Math.round(tw.other)), label: 'Median week, without cycling' },
+                    { value: String(tw.activeDays), label: 'Median active days a week' },
+                    { value: String(p.sessionsPerDay[0]), label: 'Days with one session' },
+                    { value: String(p.sessionsPerDay[1] + p.sessionsPerDay[2]), label: 'Days with two or more' }
+                ]);
                 this.drawPdfTextAt(pdf, 'Weeks by number of active days', pdf.margin, pdf.y, 8, { bold: true });
                 this.drawPdfTextAt(pdf, 'Hours by weekday, excluding cycling', pdf.margin + half + 24, pdf.y, 8, { bold: true });
                 pdf.y += 24;
@@ -1788,21 +1858,32 @@
                     item => item.sick ? HEATMAP_FILL.sick : item.holiday ? HEATMAP_FILL.holiday : p.days[item.str] ? p.days[item.str].main.fill : '#ffffff',
                     () => this.drawPdfLegend(pdf, legend));
 
+                const list = (rows, none) => {
+                    if (!rows.length) { pdf.drawText(none, pdf.margin, 9, { color: '#666666' }); pdf.y += 14; }
+                    rows.forEach(row => {
+                        pdf.ensure(18);
+                        pdf.drawText(row.left, pdf.margin, 9);
+                        this.drawPdfTextAt(pdf, row.right, pdf.W - pdf.margin, pdf.y, 8, { align: 'right', color: '#666666' });
+                        pdf.y += 14;
+                        this.drawPdfLine(pdf, pdf.margin, pdf.W - pdf.margin, pdf.y, '#eeeeee', 0.3);
+                        pdf.y += 4;
+                    });
+                    pdf.y += 10;
+                };
+                const span = x => `${this.formatDate(x.from)} to ${this.formatDate(x.to)}`;
+
+                const streaks = p.streaks.filter(st => st.days >= 2).slice(0, MAX_GAP_ROWS);
+                this.drawPdfSection(pdf, 16 * Math.max(streaks.length, 1), 'Longest streaks',
+                    `Runs of active days in a row, longest first, up to ${MAX_GAP_ROWS}. As in the Longest Streak figure on the first page, a run carries on across sick and holiday days, and its length counts active days only.`);
+                list(streaks.map(st => ({ left: span(st), right: `${st.days} active days` })), 'No run of two or more active days.');
+
                 const gaps = p.gaps.slice(0, MAX_GAP_ROWS);
                 this.drawPdfSection(pdf, 16 * Math.max(gaps.length, 1), 'Longest gaps',
                     `Runs of ${GAP_MIN_DAYS} or more days in a row with no session, longest first, up to ${MAX_GAP_ROWS}. Sick and holiday days inside a gap are counted beside it.`);
-                if (!gaps.length) {
-                    pdf.drawText(`No gap of ${GAP_MIN_DAYS} days or more.`, pdf.margin, 9, { color: '#666666' });
-                    pdf.y += 14;
-                }
-                gaps.forEach(g => {
+                list(gaps.map(g => {
                     const offNote = [g.sick && `${g.sick} sick`, g.holiday && `${g.holiday} holiday`].filter(Boolean).join(', ');
-                    pdf.drawText(`${this.formatDate(g.from)} to ${this.formatDate(g.to)}`, pdf.margin, 9);
-                    this.drawPdfTextAt(pdf, `${g.days} days${offNote ? ` · of which ${offNote}` : ''}`, pdf.W - pdf.margin, pdf.y, 8, { align: 'right', color: '#666666' });
-                    pdf.y += 14;
-                    this.drawPdfLine(pdf, pdf.margin, pdf.W - pdf.margin, pdf.y, '#eeeeee', 0.3);
-                    pdf.y += 4;
-                });
+                    return { left: span(g), right: `${g.days} days${offNote ? ` · of which ${offNote}` : ''}` };
+                }), `No gap of ${GAP_MIN_DAYS} days or more.`);
             }
 
             drawPdfLog(pdf) {

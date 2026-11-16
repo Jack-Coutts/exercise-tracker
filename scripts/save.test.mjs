@@ -355,6 +355,14 @@ const priorPdf = 'OLD PDF CONTENTS';
     ]);
     assert.equal(p.days['2026-01-05'].main.type, 'squash', 'cycling does not win a day that had another activity, even with more minutes');
     assert.equal(p.days['2026-01-06'].main.type, 'cycling', 'a day of cycling alone is a cycling day');
+    // The sick day on 7 Jan does not break a run, but the plain empty days of 8 to 10 Jan do.
+    assert.deepEqual(p.streaks.map(st => [st.from, st.to, st.days]), [['2026-01-05', '2026-01-06', 2], ['2026-01-11', '2026-01-11', 1], ['2026-02-02', '2026-02-02', 1]]);
+    assert.equal(p.streaks[0].days, tracker.calculateLongestStreak(), 'the streak list agrees with the headline figure');
+    assert.deepEqual(p.sessionsPerDay, [3, 1, 0]);
+    assert.deepEqual(p.typicalWeek, { mins: 0, other: 0, activeDays: 0 });
+    assert.deepEqual(p.months.map(m => m.activeDays), [3, 1]);
+    assert.deepEqual(p.types.map(t => [t.type, t.sessions, t.median, t.longest, t.last]),
+        [['cycling', 2, 60, 80, '2026-01-06'], ['squash', 2, 52.5, 60, '2026-02-02'], ['running', 1, 30, 30, '2026-01-11']]);
     assert.equal(p.records.week.start, '2026-01-05');
     assert.equal(p.records.session.duration_minutes, 80);
     assert.equal(tracker.buildPdfReport().length > 1000, true, 'the report builds with the Patterns pages');

@@ -86,7 +86,7 @@ View your exercise breakdown:
 ## 💡 Pro Tips
 * **No Internet Needed:** Once you open the page, you can use it at the gym without a signal. Just remember to save the files before you close the tab! 
 * **Reports:** Use **Save** to write a PDF report alongside your CSV. On Chromium browsers you pick one folder and both files land there. Other browsers download one zip with both files. The PDF uses standard Latin fonts, so the browser print dialog is the better path for notes outside Latin-1.
-* **Patterns:** The PDF also has a Patterns section, which the screen does not show. It splits cycling from all other exercise, charts hours by month and by week, shows each activity across the year, the shape of a typical week, the main activity on each day, the longest gaps and your records. Each chart states what it counts underneath its title.
+* **Patterns:** The PDF also has a Patterns section, which the screen does not show. It splits cycling from all other exercise, charts hours by month and by week, shows each activity across the year, the shape of a typical week, the main activity on each day, the longest streaks and gaps, and your records, with month by month and per activity tables. Each chart states what it counts underneath its title.
 * **Editing:** If you make a mistake, you can always open your CSV file in Excel, fix the numbers, save it, and upload it back to the app. 
 * **Backup:** Keep a copy of your CSV file in cloud storage (iCloud, Google Drive, Dropbox) so you never lose your history.
 
