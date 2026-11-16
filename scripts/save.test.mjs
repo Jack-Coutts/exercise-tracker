@@ -334,4 +334,38 @@ const priorPdf = 'OLD PDF CONTENTS';
     assert.equal(state(), loaded, 'a missing column is refused');
 }
 
+{
+    // The Patterns numbers, on a log small enough to work out by hand. 5 Jan 2026 is a Monday.
+    const { tracker } = loadTracker();
+    tracker.importNote([
+        '#### 2026-01-05 cycling 80', '#### 2026-01-05 squash 60', '#### 2026-01-06 cycling 40', '#### 2026-01-07 off sick',
+        '#### 2026-01-11 running 30', '#### 2026-02-02 squash 45'
+    ].join('\n'));
+    const p = JSON.parse(JSON.stringify(tracker.calculatePatterns()));
+    assert.deepEqual(p.totals, { cycling: 120, other: 135 });
+    assert.deepEqual(p.dayKinds, { cyclingOnly: 1, both: 1, otherOnly: 2 });
+    assert.deepEqual(p.months.map(m => [m.key, m.cycling, m.other]), [['2026-01', 120, 90], ['2026-02', 0, 45]]);
+    assert.deepEqual(p.weeks.map(w => [w.start, w.cycling + w.other, w.activeDays, w.sick]),
+        [['2026-01-05', 210, 3, 1], ['2026-01-12', 0, 0, 0], ['2026-01-19', 0, 0, 0], ['2026-01-26', 0, 0, 0], ['2026-02-02', 45, 1, 0]]);
+    assert.deepEqual(p.activeDaysPerWeek, [3, 1, 0, 1, 0, 0, 0, 0]);
+    assert.deepEqual(p.weekdayOther, [105, 0, 0, 0, 0, 0, 30]);
+    assert.deepEqual(p.gaps, [
+        { from: '2026-01-12', to: '2026-02-01', days: 21, sick: 0, holiday: 0 },
+        { from: '2026-01-07', to: '2026-01-10', days: 4, sick: 1, holiday: 0 }
+    ]);
+    assert.equal(p.days['2026-01-05'].main.type, 'squash', 'cycling does not win a day that had another activity, even with more minutes');
+    assert.equal(p.days['2026-01-06'].main.type, 'cycling', 'a day of cycling alone is a cycling day');
+    assert.equal(p.records.week.start, '2026-01-05');
+    assert.equal(p.records.session.duration_minutes, 80);
+    assert.equal(tracker.buildPdfReport().length > 1000, true, 'the report builds with the Patterns pages');
+}
+
+{
+    // A log with only off days has no patterns, and the report must still build.
+    const { tracker } = loadTracker();
+    tracker.importNote('#### 2026-01-07 off sick');
+    assert.equal(tracker.calculatePatterns(), null);
+    assert.equal(tracker.buildPdfReport().length > 1000, true);
+}
+
 console.log('save.test.mjs: all assertions passed');

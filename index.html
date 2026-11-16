@@ -307,6 +307,18 @@
         const HOLIDAY_TYPE = 'on holiday';
         const OFF_TYPES = [SICK_TYPE, HOLIDAY_TYPE];
 
+        // Patterns pages: cycling is shown apart from all other exercise.
+        const CYCLING_TYPE = 'cycling';
+        const CYCLING_FILL = '#b5b3ab';
+        const OTHER_FILL = '#44403c';
+        // Fixed order, checked for colour-blind separation. Red and blue stay reserved for sick and holiday.
+        const TYPE_COLOURS = ['#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6'];
+        const EXTRA_TYPE_FILL = '#78716c';
+        const MAX_TYPE_ROWS = 8;
+        const MIN_ROW_SESSIONS = 3;
+        const GAP_MIN_DAYS = 3;
+        const MAX_GAP_ROWS = 5;
+
         const HELVETICA_WIDTHS = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
         const HEATMAP_FILL = { 0: '#ffffff', 1: '#c0c0c0', 2: '#909090', 3: '#606060', 4: '#000000', sick: '#dc2626', holiday: '#2563eb' };
 
@@ -1390,6 +1402,7 @@
                 pdf.y += 6;
                 pdf.rule();
                 this.drawPdfHeatmaps(pdf);
+                this.drawPdfPatterns(pdf);
 
                 pdf.ensure(110);
                 pdf.y += 8;
@@ -1460,7 +1473,9 @@
                 if (holidayDays > 0) row(HOLIDAY_TYPE, `${holidayDays} day${holidayDays === 1 ? '' : 's'} (excluded from stats)`);
             }
 
-            drawPdfHeatmaps(pdf) {
+            drawPdfHeatmaps(pdf,
+                fillFor = item => item.sick ? HEATMAP_FILL.sick : item.holiday ? HEATMAP_FILL.holiday : HEATMAP_FILL[item.lvl],
+                legend = cell => this.drawPdfHeatmapLegend(pdf, cell)) {
                 const years = [...new Set(this.exercises.map(ex => new Date(ex.date).getFullYear()))].sort((a, b) => b - a);
                 if (years.length === 0) years.push(new Date().getFullYear());
                 const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -1486,12 +1501,11 @@
                             const item = weeks[w][d];
                             if (!item.valid) continue;
                             const x = gridX + w * (cell + gap);
-                            const fill = item.sick ? HEATMAP_FILL.sick : item.holiday ? HEATMAP_FILL.holiday : HEATMAP_FILL[item.lvl];
-                            pdf.fillStrokeRect(x, rowTop, cell, cell, fill, '#d4d4d4');
+                            pdf.fillStrokeRect(x, rowTop, cell, cell, fillFor(item), '#d4d4d4');
                         }
                     }
                     pdf.y = gridTop + gridH + 8;
-                    this.drawPdfHeatmapLegend(pdf, cell);
+                    legend(cell);
                     pdf.y += 10;
                 });
             }
@@ -1522,6 +1536,273 @@
                     x -= 6;
                 }
                 pdf.y = savedY + cell;
+            }
+
+            // Everything the Patterns pages show, computed once. Off days never count as sessions.
+            // Weeks run Monday to Sunday, from the week of the first session to the week of the last.
+            calculatePatterns() {
+                const toDate = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+                const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+                const sessions = this.getStatsExercises();
+                if (!sessions.length) return null;
+                const split = ex => ex.exercise_type === CYCLING_TYPE ? 'cycling' : 'other';
+                const off = new Map();
+                this.exercises.forEach(ex => { if (this.isOffType(ex.exercise_type)) off.set(ex.date, this.isSickType(ex.exercise_type) ? 'sick' : 'holiday'); });
+
+                const typeTotals = {}, days = {};
+                sessions.forEach(ex => {
+                    const t = typeTotals[ex.exercise_type] ||= { type: ex.exercise_type, mins: 0, sessions: 0 };
+                    t.mins += ex.duration_minutes;
+                    t.sessions++;
+                    const d = days[ex.date] ||= { date: ex.date, cycling: 0, other: 0, sessions: 0, byType: {} };
+                    d[split(ex)] += ex.duration_minutes;
+                    d.sessions++;
+                    d.byType[ex.exercise_type] = (d.byType[ex.exercise_type] || 0) + ex.duration_minutes;
+                });
+                const types = Object.values(typeTotals).sort((a, b) => b.mins - a.mins || (a.type < b.type ? -1 : 1));
+                let slot = 0;
+                types.forEach(t => { t.fill = t.type === CYCLING_TYPE ? CYCLING_FILL : (TYPE_COLOURS[slot++] || EXTRA_TYPE_FILL); });
+                const dayList = Object.values(days).sort((a, b) => a.date < b.date ? -1 : 1);
+                // A day's main activity is the one with the most minutes; a tie goes to the activity with more time overall.
+                // Cycling only wins a day when nothing else was done, or it would hide the other activity on most days.
+                dayList.forEach(d => {
+                    const done = types.filter(t => d.byType[t.type]);
+                    const pool = done.length > 1 ? done.filter(t => t.type !== CYCLING_TYPE) : done;
+                    d.main = pool.reduce((a, b) => d.byType[b.type] > d.byType[a.type] ? b : a);
+                });
+                const first = toDate(dayList[0].date), last = toDate(dayList[dayList.length - 1].date);
+
+                const months = [];
+                for (let d = new Date(first.getFullYear(), first.getMonth(), 1); d <= last; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
+                    months.push({ key: this.dateToStr(d).slice(0, 7), label: 'JFMAMJJASOND'[d.getMonth()], cycling: 0, other: 0, sessions: {} });
+                }
+                const monthOf = Object.fromEntries(months.map(m => [m.key, m]));
+                sessions.forEach(ex => {
+                    const m = monthOf[ex.date.slice(0, 7)];
+                    m[split(ex)] += ex.duration_minutes;
+                    m.sessions[ex.exercise_type] = (m.sessions[ex.exercise_type] || 0) + 1;
+                });
+
+                const weeks = [];
+                for (let d = addDays(first, -((first.getDay() + 6) % 7)); d <= last; d = addDays(d, 7)) {
+                    const w = { start: this.dateToStr(d), cycling: 0, other: 0, sessions: 0, activeDays: 0, sick: 0, holiday: 0 };
+                    for (let i = 0; i < 7; i++) {
+                        const key = this.dateToStr(addDays(d, i)), day = days[key];
+                        if (day) { w.cycling += day.cycling; w.other += day.other; w.sessions += day.sessions; w.activeDays++; }
+                        if (off.has(key)) w[off.get(key)]++;
+                    }
+                    weeks.push(w);
+                }
+                const activeDaysPerWeek = Array(8).fill(0);
+                weeks.forEach(w => activeDaysPerWeek[w.activeDays]++);
+                const weekdayOther = Array(7).fill(0);
+                dayList.forEach(d => { weekdayOther[(toDate(d.date).getDay() + 6) % 7] += d.other; });
+
+                const gaps = [];
+                for (let i = 1; i < dayList.length; i++) {
+                    const from = addDays(toDate(dayList[i - 1].date), 1), to = addDays(toDate(dayList[i].date), -1);
+                    const g = { from: this.dateToStr(from), to: this.dateToStr(to), days: 0, sick: 0, holiday: 0 };
+                    for (let d = from; d <= to; d = addDays(d, 1)) { g.days++; const kind = off.get(this.dateToStr(d)); if (kind) g[kind]++; }
+                    if (g.days >= GAP_MIN_DAYS) gaps.push(g);
+                }
+                gaps.sort((a, b) => b.days - a.days || (a.from < b.from ? -1 : 1));
+
+                const top = (list, f) => list.reduce((a, b) => f(b) > f(a) ? b : a);
+                const mins = x => x.cycling + x.other;
+                return {
+                    types, days, months, weeks, activeDaysPerWeek, weekdayOther, gaps,
+                    sessionCount: sessions.length,
+                    activeDays: dayList.length,
+                    totals: { cycling: dayList.reduce((s, d) => s + d.cycling, 0), other: dayList.reduce((s, d) => s + d.other, 0) },
+                    dayKinds: {
+                        cyclingOnly: dayList.filter(d => d.cycling && !d.other).length,
+                        both: dayList.filter(d => d.cycling && d.other).length,
+                        otherOnly: dayList.filter(d => !d.cycling && d.other).length
+                    },
+                    records: {
+                        week: top(weeks, mins), day: top(dayList, mins), month: top(months, mins),
+                        session: top(sessions, ex => ex.duration_minutes), busiestWeek: top(weeks, w => w.sessions)
+                    }
+                };
+            }
+
+            drawPdfTextAt(pdf, str, x, top, size, opts = {}) {
+                const w = helveticaWidth(toPdfLatin1(str), size);
+                const savedY = pdf.y;
+                pdf.y = top;
+                pdf.drawText(str, opts.align === 'center' ? x - w / 2 : opts.align === 'right' ? x - w : x, size, opts);
+                pdf.y = savedY;
+            }
+
+            drawPdfLine(pdf, x1, x2, top, colour, width = 0.4) {
+                pdf.ops.push(`${hexToPdfColour(colour)} RG ${width} w`);
+                pdf.ops.push(`${x1.toFixed(2)} ${pdf.pdfY(top, 0).toFixed(2)} m ${x2.toFixed(2)} ${pdf.pdfY(top, 0).toFixed(2)} l S`);
+            }
+
+            // Starts a titled block and keeps the title, its caption and `need` points of content on one page.
+            drawPdfSection(pdf, need, title, caption) {
+                const lines = wrapPdfText(caption, 7, pdf.width);
+                pdf.ensure(need + 15 + lines.length * 9 + 6);
+                pdf.drawText(title, pdf.margin, 11, { bold: true });
+                pdf.y += 15;
+                lines.forEach(line => { pdf.drawText(line, pdf.margin, 7, { color: '#666666' }); pdf.y += 9; });
+                pdf.y += 6;
+            }
+
+            // Swatches with labels, left to right from pdf.y, wrapping at the right margin.
+            drawPdfLegend(pdf, items) {
+                let x = pdf.margin;
+                items.forEach(item => {
+                    const w = 7 + 3 + helveticaWidth(toPdfLatin1(item.label), 7) + 12;
+                    if (x + w > pdf.W - pdf.margin + 12) { x = pdf.margin; pdf.y += 11; }
+                    pdf.fillStrokeRect(x, pdf.y, 7, 7, item.fill, '#d4d4d4');
+                    this.drawPdfTextAt(pdf, item.label, x + 10, pdf.y + 0.5, 7, { color: '#52514e' });
+                    x += w;
+                });
+                pdf.y += 14;
+            }
+
+            // Bars on one shared scale. Each bar is a stack of { v, fill } segments, drawn bottom up.
+            // Optional per bar: `top` (text above), `label` (text below), `marks` (small squares under the axis).
+            drawPdfBars(pdf, x, top, w, h, bars, { gap = 3, ticks = [], tickLabel = v => String(v) } = {}) {
+                const peak = Math.max(1, ...ticks, ...bars.map(b => b.segs.reduce((s, seg) => s + seg.v, 0)));
+                const bw = (w - gap * (bars.length - 1)) / bars.length;
+                ticks.forEach(t => {
+                    const ty = top + h - t / peak * h;
+                    this.drawPdfLine(pdf, x, x + w, ty, '#e1e0d9', 0.3);
+                    this.drawPdfTextAt(pdf, tickLabel(t), x - 3, ty - 3, 6, { align: 'right', color: '#898781' });
+                });
+                bars.forEach((b, i) => {
+                    const bx = x + i * (bw + gap);
+                    let base = top + h;
+                    b.segs.forEach(seg => {
+                        const sh = seg.v / peak * h;
+                        if (sh <= 0) return;
+                        // A thin gap separates stacked segments, so they read apart without colour.
+                        pdf.fillRect(bx, base - sh + 0.8, bw, Math.max(sh - 0.8, 0.5), seg.fill);
+                        base -= sh;
+                    });
+                    if (b.top) this.drawPdfTextAt(pdf, b.top, bx + bw / 2, base - 8, 6, { align: 'center', color: '#52514e' });
+                    (b.marks || []).forEach((fill, k) => pdf.fillRect(bx, top + h + 2 + k * 3.5, bw, 2.5, fill));
+                    if (b.label) this.drawPdfTextAt(pdf, b.label, bx + bw / 2, top + h + (b.marks ? 10 : 3), 6, { align: 'center', color: '#898781' });
+                });
+                this.drawPdfLine(pdf, x, x + w, top + h, '#c3c2b7', 0.5);
+            }
+
+            drawPdfPatterns(pdf) {
+                const p = this.calculatePatterns();
+                if (!p) return;
+                const hours = m => String(Math.round(m / 60));
+                const shortDate = s => this.formatDate(s).slice(0, 6);
+                const share = m => Math.round(100 * m / (p.totals.cycling + p.totals.other));
+                const split = x => [{ v: x.cycling, fill: CYCLING_FILL }, { v: x.other, fill: OTHER_FILL }];
+                const splitLegend = [{ fill: CYCLING_FILL, label: 'cycling' }, { fill: OTHER_FILL, label: 'everything else' }];
+                const axisX = pdf.margin + 22, axisW = pdf.width - 22;
+                const sessionsN = `n = ${p.sessionCount} sessions`;
+
+                pdf.ensure(40);
+                pdf.y += 8;
+                pdf.rule();
+                pdf.drawText('Patterns', pdf.margin, 12, { bold: true });
+                pdf.y += 20;
+
+                this.drawPdfSection(pdf, 50, 'Cycling and everything else',
+                    `Cycling is shown apart from all other exercise. Both count in every total. Days are days with at least one session (n = ${p.activeDays} active days, ${sessionsN}).`);
+                this.drawPdfStats(pdf, [
+                    { value: `${this.formatMins(p.totals.cycling)} (${share(p.totals.cycling)}%)`, label: 'Cycling time' },
+                    { value: `${this.formatMins(p.totals.other)} (${share(p.totals.other)}%)`, label: 'Everything else, time' },
+                    { value: String(p.dayKinds.cyclingOnly), label: 'Days with cycling only' },
+                    { value: String(p.dayKinds.both), label: 'Days with cycling and more' },
+                    { value: String(p.dayKinds.otherOnly), label: 'Days with no cycling' }
+                ]);
+
+                const r = p.records;
+                this.drawPdfSection(pdf, 50, 'Records', 'The largest single week (Monday to Sunday), day, calendar month and session in this report, by time, and the week with the most sessions.');
+                this.drawPdfStats(pdf, [
+                    { value: this.formatMins(r.week.cycling + r.week.other), label: `Biggest week, from ${shortDate(r.week.start)}` },
+                    { value: this.formatMins(r.day.cycling + r.day.other), label: `Biggest day, ${shortDate(r.day.date)}` },
+                    { value: this.formatMins(r.month.cycling + r.month.other), label: `Biggest month, ${this.formatDate(r.month.key + '-01').slice(3)}` },
+                    { value: `${r.session.duration_minutes} min`, label: `Longest session, ${shortDate(r.session.date)}` },
+                    { value: String(r.busiestWeek.sessions), label: `Most sessions, week of ${shortDate(r.busiestWeek.start)}` }
+                ]);
+
+                this.drawPdfSection(pdf, 118, 'Hours by month',
+                    `Total hours in each calendar month, stacked. The number above a bar is that month's total in hours. ${sessionsN}.`);
+                this.drawPdfLegend(pdf, splitLegend);
+                pdf.y += 8;
+                this.drawPdfBars(pdf, axisX, pdf.y, axisW, 78, p.months.map(m => ({ segs: split(m), top: hours(m.cycling + m.other), label: m.label })), { gap: 6 });
+                pdf.y += 78 + 18;
+
+                const weekPeak = Math.max(...p.weeks.map(w => w.cycling + w.other)) / 60;
+                const step = weekPeak > 12 ? 5 : weekPeak > 4 ? 2 : 1;
+                const ticks = [];
+                for (let t = step; t <= weekPeak; t += step) ticks.push(t * 60);
+                this.drawPdfSection(pdf, 126, 'Hours by week',
+                    `Total hours in each week (Monday to Sunday), stacked. n = ${p.weeks.length} weeks, from the week of the first session to the week of the last, so the first and last may be part weeks. A red or blue mark under a week means it held sick or holiday days. The letter marks the first week that starts in each month.`);
+                this.drawPdfLegend(pdf, [...splitLegend, { fill: HEATMAP_FILL.sick, label: 'sick days in week' }, { fill: HEATMAP_FILL.holiday, label: 'holiday days in week' }]);
+                pdf.y += 4;
+                this.drawPdfBars(pdf, axisX, pdf.y, axisW, 78, p.weeks.map((w, i) => ({
+                    segs: split(w),
+                    marks: [w.sick ? HEATMAP_FILL.sick : '#ffffff', w.holiday ? HEATMAP_FILL.holiday : '#ffffff'],
+                    label: i === 0 || w.start.slice(5, 7) !== p.weeks[i - 1].start.slice(5, 7) ? 'JFMAMJJASOND'[Number(w.start.slice(5, 7)) - 1] : ''
+                })), { gap: 1.2, ticks, tickLabel: t => `${t / 60}h` });
+                pdf.y += 78 + 24;
+
+                const own = p.types.filter(t => t.sessions >= MIN_ROW_SESSIONS).slice(0, MAX_TYPE_ROWS);
+                const rest = p.types.filter(t => !own.includes(t));
+                const rows = own.map(t => ({ name: t.type, sessions: t.sessions, fill: t.fill, types: [t.type] }));
+                if (rest.length) rows.push({ name: 'other', sessions: rest.reduce((s, t) => s + t.sessions, 0), fill: EXTRA_TYPE_FILL, types: rest.map(t => t.type) });
+                const rowH = 30, nameW = 92;
+                this.drawPdfSection(pdf, Math.min(rows.length, 4) * rowH + 14, 'Each activity by month',
+                    `Sessions in each calendar month, one row per activity. Each row has its own scale, and the number above a bar is the session count. ${sessionsN}.`
+                    + (rest.length ? ` Activities with fewer than ${MIN_ROW_SESSIONS} sessions, and any beyond the ${MAX_TYPE_ROWS} with the most time, are counted together as "other": ${rest.map(t => t.type).join(', ')}.` : ''));
+                rows.forEach((row, i) => {
+                    const count = m => row.types.reduce((s, type) => s + (m.sessions[type] || 0), 0);
+                    pdf.ensure(rowH + 12);
+                    pdf.fillRect(pdf.margin, pdf.y + 12, 7, 7, row.fill);
+                    this.drawPdfTextAt(pdf, row.name, pdf.margin + 11, pdf.y + 11, 8);
+                    this.drawPdfTextAt(pdf, `${row.sessions} session${row.sessions === 1 ? '' : 's'}`, pdf.margin + 11, pdf.y + 21, 6, { color: '#898781' });
+                    this.drawPdfBars(pdf, pdf.margin + nameW, pdf.y + 9, pdf.width - nameW, rowH - 11, p.months.map(m => ({
+                        segs: [{ v: count(m), fill: row.fill }],
+                        top: count(m) ? String(count(m)) : '',
+                        label: i === rows.length - 1 ? m.label : ''
+                    })), { gap: 6 });
+                    pdf.y += rowH;
+                });
+                pdf.y += 18;
+
+                const half = (pdf.width - 24) / 2;
+                this.drawPdfSection(pdf, 118, 'The shape of a week',
+                    `Left: how many weeks had 0 to 7 active days (n = ${p.weeks.length} weeks, counted as in Hours by week, including weeks with sick or holiday days). Right: total hours on each weekday, excluding cycling.`);
+                this.drawPdfTextAt(pdf, 'Weeks by number of active days', pdf.margin, pdf.y, 8, { bold: true });
+                this.drawPdfTextAt(pdf, 'Hours by weekday, excluding cycling', pdf.margin + half + 24, pdf.y, 8, { bold: true });
+                pdf.y += 24;
+                this.drawPdfBars(pdf, pdf.margin, pdf.y, half, 66, p.activeDaysPerWeek.map((n, d) => ({ segs: [{ v: n, fill: OTHER_FILL }], top: String(n), label: String(d) })), { gap: 8 });
+                this.drawPdfBars(pdf, pdf.margin + half + 24, pdf.y, half, 66, p.weekdayOther.map((m, d) => ({ segs: [{ v: m, fill: OTHER_FILL }], top: hours(m), label: 'MTWTFSS'[d] })), { gap: 8 });
+                pdf.y += 66 + 20;
+
+                this.drawPdfSection(pdf, 100, 'Main activity each day',
+                    'Each day takes the colour of the activity with the most minutes that day, leaving cycling aside. A day is grey only when cycling was all that was done. A tie goes to the activity with more time overall. Sick and holiday days are coloured as in the first heatmap.');
+                const legend = [...p.types.map(t => ({ fill: t.fill, label: t.type === CYCLING_TYPE ? 'cycling only' : t.type })), { fill: HEATMAP_FILL.sick, label: 'sick' }, { fill: HEATMAP_FILL.holiday, label: 'holiday' }];
+                this.drawPdfHeatmaps(pdf,
+                    item => item.sick ? HEATMAP_FILL.sick : item.holiday ? HEATMAP_FILL.holiday : p.days[item.str] ? p.days[item.str].main.fill : '#ffffff',
+                    () => this.drawPdfLegend(pdf, legend));
+
+                const gaps = p.gaps.slice(0, MAX_GAP_ROWS);
+                this.drawPdfSection(pdf, 16 * Math.max(gaps.length, 1), 'Longest gaps',
+                    `Runs of ${GAP_MIN_DAYS} or more days in a row with no session, longest first, up to ${MAX_GAP_ROWS}. Sick and holiday days inside a gap are counted beside it.`);
+                if (!gaps.length) {
+                    pdf.drawText(`No gap of ${GAP_MIN_DAYS} days or more.`, pdf.margin, 9, { color: '#666666' });
+                    pdf.y += 14;
+                }
+                gaps.forEach(g => {
+                    const offNote = [g.sick && `${g.sick} sick`, g.holiday && `${g.holiday} holiday`].filter(Boolean).join(', ');
+                    pdf.drawText(`${this.formatDate(g.from)} to ${this.formatDate(g.to)}`, pdf.margin, 9);
+                    this.drawPdfTextAt(pdf, `${g.days} days${offNote ? ` · of which ${offNote}` : ''}`, pdf.W - pdf.margin, pdf.y, 8, { align: 'right', color: '#666666' });
+                    pdf.y += 14;
+                    this.drawPdfLine(pdf, pdf.margin, pdf.W - pdf.margin, pdf.y, '#eeeeee', 0.3);
+                    pdf.y += 4;
+                });
             }
 
             drawPdfLog(pdf) {
